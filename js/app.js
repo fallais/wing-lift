@@ -621,8 +621,10 @@
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     time += dt;
-    if (staticDirty) drawStatic();
-    stepParticles(dt);
+    if (view.w && view.h) {
+      if (staticDirty) drawStatic();
+      stepParticles(dt);
+    }
     requestAnimationFrame(frame);
   }
 
