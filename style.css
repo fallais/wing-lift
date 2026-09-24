@@ -255,11 +255,8 @@ input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--accent);
   font-size: 11.5px;
   cursor: default;
 }
-.legend-row { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.legend-row { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 12px; cursor: pointer; }
 .legend-row input { margin: 0; accent-color: var(--accent); }
-.legend-row .name { min-width: 104px; color: var(--text); font-size: 12px; }
-.legend-row .scale { display: flex; align-items: center; gap: 6px; }
-.legend-row:has(input:not(:checked)) .scale { opacity: .35; }
 
 .hud {
   position: absolute;
@@ -276,21 +273,23 @@ input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--accent);
 .hud div + div { border-left: 1px solid var(--line); }
 .hud span { color: var(--muted); font-size: 11px; }
 .hud b { font-size: 16px; font-variant-numeric: tabular-nums; }
-.bar { width: 110px; height: 6px; border-radius: 3px; }
-.bar.speed { background: linear-gradient(90deg, #f97316, #fdba74, #e2e8f0, #7dd3fc, #0ea5e9); }
-.bar.pressure { background: linear-gradient(90deg, #3b82f6, transparent, #ef4444); }
 
-.hint {
+.pressure-key {
   position: absolute;
   right: 14px;
   bottom: 12px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(11, 18, 32, .65);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(11, 18, 32, .7);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11.5px;
   pointer-events: none;
 }
+.pressure-key[hidden] { display: none; }
+.pressure-key .bar { width: 90px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #3b82f6, transparent, #ef4444); }
 
 
 /* Help dialog */
@@ -327,7 +326,6 @@ input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--accent);
   .layout { grid-template-columns: 1fr; height: auto; }
   .stage { height: 58vh; min-height: 320px; }
   .panel { border-left: 0; overflow: visible; }
-  .hint { display: none; }
   .brand .sub { display: none; }
 }
 
@@ -335,7 +333,6 @@ input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--accent);
   .hud { right: 14px; flex-wrap: nowrap; justify-content: space-between; }
   .hud div { padding: 0 5px; }
   .hud b { font-size: 13px; white-space: nowrap; }
-  .legend-row .name { min-width: 0; }
-  .legend-row .scale > span:not(.bar) { display: none; }
-  .bar { width: 70px; }
+  .pressure-key { flex-direction: column; gap: 3px; }
+  .pressure-key .bar { width: 70px; }
 }

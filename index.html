@@ -39,21 +39,21 @@
       <div class="badge-stall slow" id="slowBadge" data-i18n="tooSlow">Trop lent !</div>
       <div class="legend" id="legend">
         <label class="legend-row">
-          <input type="checkbox" data-show="particles"><span class="name" data-i18n="showParticles">Particules</span>
-          <span class="scale"><span data-i18n="legSlow">lent</span><span class="bar speed"></span><span data-i18n="legFast">rapide</span></span>
+          <input type="checkbox" data-show="particles"><span data-i18n="showParticles">Particules</span>
         </label>
         <label class="legend-row">
-          <input type="checkbox" data-show="pressure"><span class="name" data-i18n="showPressure">Pression</span>
-          <span class="scale"><span data-i18n="legLow">dépression</span><span class="bar pressure"></span><span data-i18n="legHigh">surpression</span></span>
+          <input type="checkbox" data-show="pressure"><span data-i18n="showPressure">Pression</span>
         </label>
         <label class="legend-row">
-          <input type="checkbox" data-show="streamlines"><span class="name" data-i18n="showStreamlines">Lignes de courant</span>
+          <input type="checkbox" data-show="streamlines"><span data-i18n="showStreamlines">Lignes de courant</span>
         </label>
         <label class="legend-row">
-          <input type="checkbox" data-show="forces"><span class="name" data-i18n="showForces">Forces</span>
+          <input type="checkbox" data-show="forces"><span data-i18n="showForces">Forces</span>
         </label>
       </div>
-      <div class="hint" data-i18n="hint">Glissez verticalement pour incliner l'aile</div>
+      <div class="pressure-key" id="pressureKey">
+        <span data-i18n="legLow">dépression</span><span class="bar"></span><span data-i18n="legHigh">surpression</span>
+      </div>
     </section>
 
     <aside class="panel">
@@ -87,22 +87,22 @@
         <div class="field">
           <div class="row"><label for="speed" data-i18n="speed">Vitesse V</label><output id="outSpeed"></output></div>
           <div class="range-wrap">
-            <input type="range" id="speed" min="0" max="100" step="1">
+            <input type="range" id="speed" min="0" max="250" step="1">
             <div class="vs-zone" id="vsZone"><span>Vₛ</span></div>
           </div>
         </div>
         <div class="pair">
           <div class="field">
             <div class="row"><label for="altitude" data-i18n="altitude">Altitude</label><output id="outAltitude"></output></div>
-            <input type="range" id="altitude" min="0" max="10000" step="100">
+            <input type="range" id="altitude" min="0" max="12000" step="100">
           </div>
           <div class="field">
             <div class="row"><label for="area" data-i18n="area">Surface S</label><output id="outArea"></output></div>
-            <input type="range" id="area" min="1" max="60" step="0.5">
+            <input type="range" id="area" min="1" max="130" step="0.5">
           </div>
           <div class="field">
             <div class="row"><label for="mass" data-i18n="mass">Masse</label><output id="outMass"></output></div>
-            <input type="range" id="mass" min="100" max="8000" step="50">
+            <input type="range" id="mass" min="0" max="1000" step="1">
           </div>
           <div class="field">
             <div class="row"><label for="plane" data-i18n="aircraft">Avion</label></div>
@@ -110,6 +110,7 @@
               <option value="glider" data-i18n="plGlider">Planeur</option>
               <option value="cessna" data-i18n="plCessna">Cessna 172</option>
               <option value="pc12" data-i18n="plPc12">Pilatus PC-12</option>
+              <option value="a321" data-i18n="plA321">Airbus A321</option>
               <option value="custom" data-i18n="pCustom" disabled>Personnalisé</option>
             </select>
           </div>

@@ -25,7 +25,7 @@
       area: 'Surface S',
       mass: 'Masse',
       aircraft: 'Avion',
-      plGlider: 'Planeur', plCessna: 'Cessna 172', plPc12: 'Pilatus PC-12',
+      plGlider: 'Planeur', plCessna: 'Cessna 172', plPc12: 'Pilatus PC-12', plA321: 'Airbus A321',
       level: 'Vol en palier (α automatique)',
       showParticles: 'Particules',
       showStreamlines: 'Lignes de courant',
@@ -42,8 +42,7 @@
       chart: 'Courbe Cz(α)',
       stall: 'Décrochage !',
       tooSlow: 'Trop lent pour voler !',
-      hint: "Glissez verticalement pour incliner l'aile",
-      legSlow: 'lent', legFast: 'rapide', legLow: 'dépression', legHigh: 'surpression',
+      legLow: 'dépression', legHigh: 'surpression',
       lift: 'Portance', drag: 'Traînée', res: 'Résultante', weight: 'Poids',
       cl: 'Cz', liftSym: 'P',
       caption: (z, s) => `Portance nulle à α = ${z}° · décrochage vers ${s}°`,
@@ -67,7 +66,7 @@
       area: 'Wing area S',
       mass: 'Mass',
       aircraft: 'Aircraft',
-      plGlider: 'Glider', plCessna: 'Cessna 172', plPc12: 'Pilatus PC-12',
+      plGlider: 'Glider', plCessna: 'Cessna 172', plPc12: 'Pilatus PC-12', plA321: 'Airbus A321',
       level: 'Level flight (automatic α)',
       showParticles: 'Particles',
       showStreamlines: 'Streamlines',
@@ -84,8 +83,7 @@
       chart: 'CL(α) curve',
       stall: 'Stall!',
       tooSlow: 'Too slow to fly!',
-      hint: 'Drag vertically to tilt the wing',
-      legSlow: 'slow', legFast: 'fast', legLow: 'low pressure', legHigh: 'high pressure',
+      legLow: 'low pressure', legHigh: 'high pressure',
       lift: 'Lift', drag: 'Drag', res: 'Resultant', weight: 'Weight',
       cl: 'CL', liftSym: 'L',
       caption: (z, s) => `Zero lift at α = ${z}° · stall around ${s}°`,
@@ -97,7 +95,18 @@
     glider: { mass: 600, area: 18 },
     cessna: { mass: 1100, area: 16 },
     pc12: { mass: 4750, area: 26 },
+    a321: { mass: 93500, area: 122.5 },
   };
+
+  // Mass slider is logarithmic (100 kg to 100 t) so a glider and an airliner both get usable resolution.
+  const MASS_MIN = 100, MASS_MAX = 100000;
+  const massToSlider = m => Math.round(1000 * Math.log(m / MASS_MIN) / Math.log(MASS_MAX / MASS_MIN));
+  const sliderToMass = v => {
+    const m = MASS_MIN * (MASS_MAX / MASS_MIN) ** (v / 1000);
+    const step = m < 1000 ? 10 : m < 10000 ? 50 : 500;
+    return Math.round(m / step) * step;
+  };
+  const SPEED_MAX = 250;
 
   const SPEED_BUCKETS = [0.6, 0.85, 0.95, 1.05, 1.2, 1.45, Infinity];
   const SPEED_COLORS = ['#f97316', '#fdba74', '#f1e4d4', '#e2e8f0', '#bae6fd', '#7dd3fc', '#0ea5e9'].map(c => c + 'c0');
@@ -262,7 +271,8 @@
     ctx.fillRect(0, 0, view.w, view.h);
     ctx.globalCompositeOperation = 'source-over';
 
-    const speedFactor = state.speed / 50;
+    // Capped so particles stay readable at airliner speeds.
+    const speedFactor = Math.min(state.speed, 100) / 50;
     const k = speedFactor * 1.3 * dt;
 
     for (let i = 0; i < count; i++) {
@@ -448,13 +458,18 @@
     if (!state.show.forces) return;
 
     // Arrows are proportional to force: 1 unit of coefficient ≈ 1.5 chord-quarters at 50 m/s, 16 m².
+    // Shrunk when needed so they stay clear of the results strip (top) and the legend (bottom).
     const f = forces();
-    let k = 1.5 * view.s / Q_REF;
-    const maxLen = 0.42 * view.h;
-    const longest = Math.max(Math.abs(f.lift), Math.abs(f.drag), f.res, f.weight) * k;
-    if (longest > maxLen) k *= maxLen / longest;
-
     const ac = wingToScreen(af.ac);
+    let k = 1.5 * view.s / Q_REF;
+    const above = Math.max(f.lift, 0), below = Math.max(f.weight, -f.lift);
+    const fit = Math.min(
+      (ac.y - 120) / (above * k || 1),
+      (view.h - ac.y - 150) / (below * k || 1),
+      0.42 * view.w / (f.drag * k || 1),
+    );
+    if (fit < 1) k *= Math.max(0, fit);
+
     const lift = { x: ac.x, y: ac.y - f.lift * k };
     const drag = { x: ac.x + f.drag * k, y: ac.y };
     const res = { x: drag.x, y: lift.y };
@@ -550,7 +565,7 @@
     $('slowBadge').classList.toggle('on', slow);
     const zone = $('vsZone');
     zone.hidden = !hasVs;
-    zone.style.width = `calc((100% - 16px) * ${Math.min(1, f.vs / 100)})`;
+    zone.style.width = `calc((100% - 16px) * ${Math.min(1, f.vs / SPEED_MAX)})`;
 
     $('stallBadge').classList.toggle('on', aero.stall > 0);
     updatePresetUI();
@@ -608,8 +623,9 @@
     };
     for (const [key, onChange] of Object.entries(ranges)) {
       const input = $(key);
-      input.value = state[key];
-      input.addEventListener('input', () => { state[key] = +input.value; onChange(); });
+      const toState = key === 'mass' ? sliderToMass : Number;
+      input.value = key === 'mass' ? massToSlider(state.mass) : state[key];
+      input.addEventListener('input', () => { state[key] = toState(input.value); onChange(); });
     }
 
     $('preset').addEventListener('change', e => {
@@ -621,7 +637,7 @@
 
     $('plane').addEventListener('change', e => {
       Object.assign(state, PLANES[e.target.value]);
-      $('mass').value = state.mass;
+      $('mass').value = massToSlider(state.mass);
       $('area').value = state.area;
       flightChanged();
     });
@@ -634,11 +650,13 @@
         state.show[box.dataset.show] = box.checked;
         if (!state.show.particles) fxCtx.clearRect(0, 0, view.w, view.h);
         staticDirty = true;
+        $('pressureKey').hidden = !state.show.pressure;
         drawOverlay();
       });
     });
     // The legend holds the display toggles: clicking it must not tilt the wing.
     $('legend').addEventListener('pointerdown', e => e.stopPropagation());
+    $('pressureKey').hidden = !state.show.pressure;
 
     document.querySelectorAll('[data-lang]').forEach(btn => btn.addEventListener('click', () => {
       state.lang = btn.dataset.lang;
