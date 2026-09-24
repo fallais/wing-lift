@@ -191,7 +191,7 @@ input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--accent);
   pointer-events: none;
 }
 .badge-stall.on { opacity: 1; transform: translateX(-50%) scale(1); animation: pulse 1.2s ease-in-out infinite; }
-@keyframes pulse { 50% { box-shadow: 0 0 6px rgba(220, 38, 38, .3); } }
+@keyframes pulse { 50% { opacity: .75; } }
 
 .legend {
   position: absolute;

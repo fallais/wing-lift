@@ -97,7 +97,7 @@
   };
 
   const SPEED_BUCKETS = [0.6, 0.85, 0.95, 1.05, 1.2, 1.45, Infinity];
-  const SPEED_COLORS = ['#f97316', '#fdba74', '#f1e4d4', '#e2e8f0', '#bae6fd', '#7dd3fc', '#0ea5e9'];
+  const SPEED_COLORS = ['#f97316', '#fdba74', '#f1e4d4', '#e2e8f0', '#bae6fd', '#7dd3fc', '#0ea5e9'].map(c => c + 'c0');
 
   const state = {
     lang: 'fr',
@@ -228,11 +228,11 @@
 
   function stepParticles(dt) {
     const ctx = fxCtx;
+    if (!state.show.particles) return;
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
     ctx.fillRect(0, 0, view.w, view.h);
     ctx.globalCompositeOperation = 'source-over';
-    if (!state.show.particles) return;
 
     const speedFactor = state.speed / 50;
     const k = speedFactor * 1.3 * dt;
@@ -264,8 +264,7 @@
     }
 
     ctx.lineWidth = 1.3;
-    ctx.lineCap = 'round';
-    ctx.globalAlpha = 0.75;
+    ctx.lineCap = 'butt';
     for (let b = 0; b < SPEED_COLORS.length; b++) {
       ctx.strokeStyle = SPEED_COLORS[b];
       ctx.beginPath();
@@ -276,7 +275,6 @@
       }
       ctx.stroke();
     }
-    ctx.globalAlpha = 1;
   }
 
   // ---------- Static layer: pressure map & streamlines ----------
@@ -566,6 +564,7 @@
       box.checked = state.show[box.dataset.show];
       box.addEventListener('change', () => {
         state.show[box.dataset.show] = box.checked;
+        if (!state.show.particles) fxCtx.clearRect(0, 0, view.w, view.h);
         staticDirty = true;
         updateLegend();
         drawOverlay();
@@ -608,11 +607,12 @@
 
   function resize() {
     const w = stage.clientWidth, h = stage.clientHeight;
+    // Particles are redrawn every frame: keep that canvas at 1x to spare the GPU.
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    for (const ctx of [bgCtx, fxCtx]) {
-      ctx.canvas.width = Math.round(w * dpr);
-      ctx.canvas.height = Math.round(h * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const [ctx, scale] of [[bgCtx, dpr], [fxCtx, 1]]) {
+      ctx.canvas.width = Math.round(w * scale);
+      ctx.canvas.height = Math.round(h * scale);
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
     }
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
 
@@ -627,12 +627,15 @@
     drawOverlay();
   }
 
+  const FRAME_MS = 1000 / 30;
   let last = performance.now();
+  let visible = true;
   function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    if (now - last < FRAME_MS - 2) { requestAnimationFrame(frame); return; }
+    const dt = Math.min(0.08, (now - last) / 1000);
     last = now;
     time += dt;
-    if (view.w && view.h) {
+    if (visible && view.w && view.h) {
       if (staticDirty) drawStatic();
       stepParticles(dt);
     }
@@ -647,5 +650,6 @@
   updateLegend();
   applyLanguage();
   new ResizeObserver(resize).observe(stage);
+  new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }).observe(stage);
   requestAnimationFrame(frame);
 })();
