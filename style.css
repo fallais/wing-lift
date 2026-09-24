@@ -162,8 +162,8 @@ input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--accent);
 }
 .lbl.alpha { fill: #fbbf24; }
 .arrow line { stroke-width: 3; stroke-linecap: round; }
-.arrow.wind line { stroke: var(--muted); stroke-width: 2; }
-.arrow.wind path { fill: var(--muted); }
+.arrow.wind line { stroke: var(--accent); stroke-width: 4; }
+.arrow.wind path { fill: var(--accent); }
 .arrow.lift line { stroke: var(--lift); }
 .arrow.lift path { fill: var(--lift); }
 .arrow.drag line { stroke: var(--drag); }
@@ -224,6 +224,22 @@ input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--accent);
   font-size: 12px;
   pointer-events: none;
 }
+
+.wind-ctrl {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 8px;
+  background: rgba(11, 18, 32, .7);
+  font-weight: 600;
+  cursor: default;
+}
+.wind-ctrl button { width: 28px; height: 28px; padding: 0; font-size: 16px; line-height: 1; }
+.wind-ctrl output { min-width: 130px; text-align: center; color: var(--accent); font-variant-numeric: tabular-nums; }
 
 /* Help dialog */
 

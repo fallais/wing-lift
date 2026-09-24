@@ -359,7 +359,6 @@
       <path id="alphaArc" class="arc"/>
       <text id="alphaLabel" class="lbl alpha"/>
       ${arrow('arrWind', 'wind')}
-      <text id="windLabel" class="lbl" x="18" y="24"/>
       <path id="wing" class="wing"/>
       <g id="forces">
         <line id="compL" class="comp"/><line id="compD" class="comp"/>
@@ -415,8 +414,7 @@
     setLabel('alphaLabel', te.x + r * 1.08 * Math.cos(phi / 2) + 4, te.y + r * 1.08 * Math.sin(phi / 2) + 4,
       `α = ${fmt(state.alpha, 1)}°`);
 
-    setArrow('arrWind', 18, 40, 118, 40);
-    $('windLabel').textContent = `${tr('wind')} · ${fmt(state.speed)} m/s`;
+    setArrow('arrWind', 18, 60, 18 + 20 + state.speed * 1.6, 60);
 
     const group = $('forces');
     group.style.display = state.show.forces ? '' : 'none';
@@ -485,7 +483,9 @@
     $('outThickness').textContent = `${fmt(state.thickness, 1)} %`;
     $('outCamber').textContent = `${fmt(state.camber, 1)} %`;
     $('outAlpha').textContent = `${fmt(state.alpha, 1)}°`;
-    $('outSpeed').textContent = `${fmt(state.speed)} m/s · ${fmt(state.speed * 3.6)} km/h`;
+    const speedText = `${fmt(state.speed)} m/s · ${fmt(state.speed * 3.6)} km/h`;
+    $('outSpeed').textContent = speedText;
+    $('windOut').textContent = speedText;
     $('outAltitude').textContent = `${fmt(state.altitude)} m · ρ = ${fmt(f.rho, 3)} kg/m³`;
     $('outArea').textContent = `${fmt(state.area, 1)} m²`;
 
@@ -574,6 +574,15 @@
       state.lang = btn.dataset.lang;
       applyLanguage();
     }));
+
+    const setSpeed = v => {
+      state.speed = Math.max(0, Math.min(100, v));
+      $('speed').value = state.speed;
+      render();
+    };
+    $('windDown').addEventListener('click', () => setSpeed(state.speed - 5));
+    $('windUp').addEventListener('click', () => setSpeed(state.speed + 5));
+    document.querySelector('.wind-ctrl').addEventListener('pointerdown', e => e.stopPropagation());
 
     $('helpBtn').addEventListener('click', () => $('help').showModal());
     $('help').addEventListener('click', e => { if (e.target === $('help')) $('help').close(); });
