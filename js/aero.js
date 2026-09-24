@@ -4,7 +4,7 @@
   'use strict';
 
   const DEG = Math.PI / 180;
-  const VISCOUS_FACTOR = 0.9;
+  const VISCOUS_FACTOR = 0.85;
   const ASPECT_RATIO = 8;
   const OSWALD = 0.85;
 
@@ -58,9 +58,9 @@
 
   function coefficients(af, alphaDeg) {
     const betaDeg = af.beta / DEG;
-    const stallAngle = Math.min(16, 10 + 30 * af.thickness);
-    const stallPosEff = stallAngle + 0.5 * betaDeg;
-    const stallNegEff = stallAngle - 0.5 * betaDeg;
+    const stallAngle = Math.min(17, 9 + 50 * af.thickness);
+    const stallPosEff = stallAngle + 0.8 * betaDeg;
+    const stallNegEff = stallAngle - 0.2 * betaDeg;
     const linear = ae => VISCOUS_FACTOR * 8 * Math.PI * af.R * Math.sin(ae * DEG) / af.chord;
 
     const ae = alphaDeg + betaDeg;

@@ -203,7 +203,7 @@
   let count = 0, px, py, ox, oy, phase, life, bucket;
 
   function initParticles() {
-    count = Math.round(Math.min(3500, view.w * view.h / 380));
+    count = Math.round(Math.min(3500, view.w * view.h / 900));
     px = new Float32Array(count);
     py = new Float32Array(count);
     ox = new Float32Array(count);
@@ -222,20 +222,20 @@
       if (sampleVelocity(x, y)) { px[i] = ox[i] = x; py[i] = oy[i] = y; break; }
     }
     phase[i] = Math.random() * Math.PI * 2;
-    life[i] = 8 + Math.random() * 12;
+    life[i] = 15 + Math.random() * 20;
     bucket[i] = 255;
   }
 
   function stepParticles(dt) {
     const ctx = fxCtx;
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = 'rgba(0,0,0,0.16)';
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
     ctx.fillRect(0, 0, view.w, view.h);
     ctx.globalCompositeOperation = 'source-over';
     if (!state.show.particles) return;
 
     const speedFactor = state.speed / 50;
-    const k = speedFactor * 3.2 * dt;
+    const k = speedFactor * 1.3 * dt;
 
     for (let i = 0; i < count; i++) {
       const x = px[i], y = py[i];
@@ -263,8 +263,9 @@
       if (px[i] > view.x1 + 0.3 || py[i] < view.y0 - 0.5 || py[i] > view.y1 + 0.5) spawn(i, false);
     }
 
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = 1.3;
     ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.75;
     for (let b = 0; b < SPEED_COLORS.length; b++) {
       ctx.strokeStyle = SPEED_COLORS[b];
       ctx.beginPath();
@@ -275,6 +276,7 @@
       }
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
   }
 
   // ---------- Static layer: pressure map & streamlines ----------
