@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portance d'une aile</title>
+  <meta name="description" content="Simulateur interactif de l'écoulement de l'air et de la portance autour d'un profil d'aile.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M8 60 Q40 20 92 55 Q45 62 8 60Z' fill='%2338bdf8'/></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1 data-i18n="title">Portance d'une aile</h1>
+      <span class="sub" data-i18n="subtitle">Soufflerie virtuelle</span>
+    </div>
+    <div class="actions">
+      <button class="help-btn" id="helpBtn" data-i18n="help">Aide</button>
+      <div class="lang">
+        <button data-lang="fr">FR</button>
+        <button data-lang="en">EN</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage" id="stage">
+      <canvas id="bg"></canvas>
+      <canvas id="fx"></canvas>
+      <svg id="overlay" aria-hidden="true"></svg>
+      <div class="badge-stall" id="stallBadge" data-i18n="stall">Décrochage !</div>
+      <div class="legend">
+        <div class="legend-row" id="legendSpeed">
+          <span data-i18n="legSlow">lent</span><span class="bar speed"></span><span data-i18n="legFast">rapide</span>
+        </div>
+        <div class="legend-row" id="legendPressure">
+          <span data-i18n="legLow">dépression</span><span class="bar pressure"></span><span data-i18n="legHigh">surpression</span>
+        </div>
+      </div>
+      <div class="hint" data-i18n="hint">Glissez verticalement pour incliner l'aile</div>
+    </section>
+
+    <aside class="panel">
+      <section class="card">
+        <h2 data-i18n="profile">Profil</h2>
+        <div class="presets">
+          <button data-preset="classic" data-i18n="pClassic">Classique</button>
+          <button data-preset="symmetric" data-i18n="pSymmetric">Symétrique</button>
+          <button data-preset="flat" data-i18n="pFlat">Plaque plane</button>
+          <button data-preset="cambered" data-i18n="pCambered">Très cambré</button>
+        </div>
+        <p class="preset-desc" id="presetDesc"></p>
+        <div class="field">
+          <div class="row"><label for="thickness" data-i18n="thickness">Épaisseur</label><output id="outThickness"></output></div>
+          <input type="range" id="thickness" min="1" max="25" step="0.5">
+        </div>
+        <div class="field">
+          <div class="row"><label for="camber" data-i18n="camber">Cambrure</label><output id="outCamber"></output></div>
+          <input type="range" id="camber" min="-10" max="12" step="0.5">
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="flight">Vol</h2>
+        <div class="field">
+          <div class="row"><label for="alpha" data-i18n="alpha">Incidence α</label><output id="outAlpha"></output></div>
+          <input type="range" id="alpha" min="-20" max="25" step="0.1">
+        </div>
+        <div class="field">
+          <div class="row"><label for="speed" data-i18n="speed">Vitesse V</label><output id="outSpeed"></output></div>
+          <input type="range" id="speed" min="0" max="100" step="1">
+        </div>
+        <div class="field">
+          <div class="row"><label for="altitude" data-i18n="altitude">Altitude</label><output id="outAltitude"></output></div>
+          <input type="range" id="altitude" min="0" max="10000" step="100">
+        </div>
+        <div class="field">
+          <div class="row"><label for="area" data-i18n="area">Surface alaire S</label><output id="outArea"></output></div>
+          <input type="range" id="area" min="1" max="60" step="0.5">
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="display">Affichage</h2>
+        <div class="toggles">
+          <label><input type="checkbox" data-show="particles"> <span data-i18n="showParticles">Particules</span></label>
+          <label><input type="checkbox" data-show="streamlines"> <span data-i18n="showStreamlines">Lignes de courant</span></label>
+          <label><input type="checkbox" data-show="pressure"> <span data-i18n="showPressure">Pression</span></label>
+          <label><input type="checkbox" data-show="forces"> <span data-i18n="showForces">Forces</span></label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="results">Résultats</h2>
+        <dl class="readouts">
+          <dt data-i18n="rCl">Cz</dt><dd id="rCl"></dd>
+          <dt data-i18n="rCd">Cx</dt><dd id="rCd"></dd>
+          <dt data-i18n="rLd">Finesse</dt><dd id="rLd"></dd>
+          <dt data-i18n="rQ">Pression dynamique q</dt><dd id="rQ"></dd>
+          <dt data-i18n="rLift">Portance</dt><dd id="rLift" class="c-lift"></dd>
+          <dt data-i18n="rDrag">Traînée</dt><dd id="rDrag" class="c-drag"></dd>
+          <dt data-i18n="rRes">Résultante</dt><dd id="rRes" class="c-res"></dd>
+          <dt data-i18n="rMass">Masse soutenue</dt><dd id="rMass"></dd>
+        </dl>
+        <div class="formula" id="formula"></div>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="chart">Courbe Cz(α)</h2>
+        <svg id="chart" class="chart" viewBox="0 0 300 170"></svg>
+        <p class="caption" id="chartCaption"></p>
+      </section>
+    </aside>
+  </main>
+
+  <dialog id="help" class="help">
+    <form method="dialog"><button class="close" aria-label="Fermer">×</button></form>
+
+    <div data-l="fr">
+      <h2>Comment une aile vole-t-elle ?</h2>
+      <p>L'air qui contourne l'aile accélère sur le dessus (l'<b>extrados</b>) et ralentit dessous (l'<b>intrados</b>). Là où l'air va vite, sa pression baisse (Bernoulli). La dépression au-dessus et la surpression au-dessous poussent l'aile vers le haut : c'est la <b>portance</b>.</p>
+      <p class="big-formula">P = ½ · ρ · V² · S · Cz</p>
+
+      <h3>Lexique</h3>
+      <dl class="glossary">
+        <dt>α — Incidence</dt>
+        <dd>Angle entre la corde de l'aile (la droite du bord d'attaque au bord de fuite) et le vent relatif. Plus α est grand, plus l'aile dévie l'air vers le bas… jusqu'au décrochage.</dd>
+        <dt>V — Vitesse</dt>
+        <dd>Vitesse de l'air par rapport à l'aile (m/s). Elle compte au carré : deux fois plus vite, quatre fois plus de portance.</dd>
+        <dt>ρ (rhô) — Masse volumique de l'air</dt>
+        <dd>Masse d'un mètre cube d'air : 1,225 kg/m³ au niveau de la mer, environ 0,41 kg/m³ à 10 000 m. Un air moins dense porte moins : c'est pourquoi les avions décollent plus long en altitude ou par forte chaleur.</dd>
+        <dt>S — Surface alaire</dt>
+        <dd>Surface de l'aile vue de dessus (m²). Environ 16 m² pour un Cessna 172, 845 m² pour un A380.</dd>
+        <dt>q — Pression dynamique</dt>
+        <dd>q = ½ · ρ · V², en pascals. C'est « l'énergie » du vent par unité de volume, la même pour tous les profils.</dd>
+        <dt>Cz — Coefficient de portance</dt>
+        <dd>Nombre sans unité qui résume l'efficacité du profil à cette incidence. Il augmente presque linéairement avec α (environ 0,1 par degré), puis chute au décrochage. En anglais : C<sub>L</sub>.</dd>
+        <dt>Cx — Coefficient de traînée</dt>
+        <dd>Même idée pour la traînée : T = ½ · ρ · V² · S · Cx. En anglais : C<sub>D</sub>.</dd>
+        <dt>Portance</dt>
+        <dd>Composante de la force aérodynamique perpendiculaire au vent relatif (flèche verte).</dd>
+        <dt>Traînée</dt>
+        <dd>Composante parallèle au vent, qui freine l'aile (flèche rouge).</dd>
+        <dt>Résultante aérodynamique</dt>
+        <dd>La force totale exercée par l'air : somme vectorielle de la portance et de la traînée (flèche jaune). On la place au quart avant de la corde, le « foyer ».</dd>
+        <dt>Finesse</dt>
+        <dd>Cz / Cx = portance / traînée. Un planeur de finesse 40 parcourt 40 km en perdant 1 km d'altitude.</dd>
+        <dt>Décrochage</dt>
+        <dd>Au-delà d'une certaine incidence (~12–16°), l'air ne suit plus l'extrados et s'en décolle en tourbillons : la portance s'effondre et la traînée explose.</dd>
+        <dt>Cambrure</dt>
+        <dd>Courbure de la ligne moyenne du profil. Un profil cambré porte déjà à α = 0°. Un profil symétrique ne porte qu'avec une incidence.</dd>
+        <dt>Épaisseur</dt>
+        <dd>Épaisseur maximale du profil, en % de la corde. Un profil plus épais décroche plus doucement, mais traîne un peu plus.</dd>
+        <dt>Masse soutenue</dt>
+        <dd>Portance divisée par g (9,81 m/s²) : la masse que l'aile peut porter en vol stabilisé.</dd>
+      </dl>
+
+      <h3>Ce qu'on voit</h3>
+      <ul>
+        <li><b>Particules</b> : bleu = air rapide, orange = air lent. Elles se resserrent et accélèrent sur l'extrados.</li>
+        <li><b>Pression</b> : bleu = dépression, rouge = surpression (point d'arrêt au bord d'attaque).</li>
+        <li><b>Lignes de courant</b> : le chemin que suit l'air. Là où elles se rapprochent, l'air accélère.</li>
+      </ul>
+
+      <h3>Le modèle</h3>
+      <p class="muted">Écoulement potentiel autour d'un profil de Joukowski, avec condition de Kutta (l'air quitte proprement le bord de fuite). Le décrochage et la traînée viennent d'un modèle empirique simplifié (allongement supposé de 8). C'est un outil pédagogique, pas un outil de conception.</p>
+    </div>
+
+    <div data-l="en">
+      <h2>How does a wing fly?</h2>
+      <p>Air flowing around the wing speeds up over the top (the <b>upper surface</b>) and slows down underneath (the <b>lower surface</b>). Where air is fast, its pressure drops (Bernoulli). Low pressure above and higher pressure below push the wing upwards: that's <b>lift</b>.</p>
+      <p class="big-formula">L = ½ · ρ · V² · S · C<sub>L</sub></p>
+
+      <h3>Glossary</h3>
+      <dl class="glossary">
+        <dt>α — Angle of attack</dt>
+        <dd>Angle between the chord (the line from the leading edge to the trailing edge) and the relative wind. More α deflects more air downwards… until the wing stalls.</dd>
+        <dt>V — Airspeed</dt>
+        <dd>Speed of the air relative to the wing (m/s). It is squared: twice as fast gives four times the lift.</dd>
+        <dt>ρ (rho) — Air density</dt>
+        <dd>Mass of one cubic metre of air: 1.225 kg/m³ at sea level, about 0.41 kg/m³ at 10,000 m. Thinner air lifts less, which is why take-offs are longer at altitude or on hot days.</dd>
+        <dt>S — Wing area</dt>
+        <dd>Area of the wing seen from above (m²). About 16 m² for a Cessna 172, 845 m² for an A380.</dd>
+        <dt>q — Dynamic pressure</dt>
+        <dd>q = ½ · ρ · V², in pascals. The wind's "energy" per unit volume, the same for every airfoil.</dd>
+        <dt>C<sub>L</sub> — Lift coefficient</dt>
+        <dd>A dimensionless number describing how well the airfoil lifts at this angle. It grows almost linearly with α (about 0.1 per degree), then drops at the stall. French: Cz.</dd>
+        <dt>C<sub>D</sub> — Drag coefficient</dt>
+        <dd>Same idea for drag: D = ½ · ρ · V² · S · C<sub>D</sub>. French: Cx.</dd>
+        <dt>Lift</dt>
+        <dd>The part of the aerodynamic force perpendicular to the relative wind (green arrow).</dd>
+        <dt>Drag</dt>
+        <dd>The part parallel to the wind, slowing the wing down (red arrow).</dd>
+        <dt>Resultant aerodynamic force</dt>
+        <dd>The total force from the air: vector sum of lift and drag (yellow arrow), drawn at the quarter-chord point, the aerodynamic centre.</dd>
+        <dt>Lift-to-drag ratio</dt>
+        <dd>C<sub>L</sub> / C<sub>D</sub>. A glider with L/D = 40 travels 40 km for every 1 km of height lost.</dd>
+        <dt>Stall</dt>
+        <dd>Beyond a certain angle (~12–16°) the air can no longer follow the upper surface and breaks away in eddies: lift collapses and drag soars.</dd>
+        <dt>Camber</dt>
+        <dd>Curvature of the airfoil's mean line. A cambered airfoil already lifts at α = 0°. A symmetric one only lifts with some angle of attack.</dd>
+        <dt>Thickness</dt>
+        <dd>Maximum thickness as a % of the chord. Thicker airfoils stall more gently but have a bit more drag.</dd>
+        <dt>Supported mass</dt>
+        <dd>Lift divided by g (9.81 m/s²): the mass the wing can hold up in level flight.</dd>
+      </dl>
+
+      <h3>What you see</h3>
+      <ul>
+        <li><b>Particles</b>: blue = fast air, orange = slow air. They bunch up and speed up over the top.</li>
+        <li><b>Pressure</b>: blue = low pressure, red = high pressure (stagnation point at the leading edge).</li>
+        <li><b>Streamlines</b>: the paths the air follows. Where they get closer together, the air speeds up.</li>
+      </ul>
+
+      <h3>The model</h3>
+      <p class="muted">Potential flow around a Joukowski airfoil with the Kutta condition (air leaves the trailing edge smoothly). Stall and drag come from a simplified empirical model (aspect ratio assumed to be 8). A teaching tool, not a design tool.</p>
+    </div>
+  </dialog>
+
+  <script src="js/aero.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
