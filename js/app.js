@@ -22,26 +22,23 @@
       alpha: 'Incidence α',
       speed: 'Vitesse V',
       altitude: 'Altitude',
-      area: 'Surface alaire S',
-      mass: "Masse de l'avion",
+      area: 'Surface S',
+      mass: 'Masse',
+      aircraft: 'Avion',
       plGlider: 'Planeur', plCessna: 'Cessna 172', plPc12: 'Pilatus PC-12',
       level: 'Vol en palier (α automatique)',
-      display: 'Affichage',
       showParticles: 'Particules',
       showStreamlines: 'Lignes de courant',
       showPressure: 'Pression',
       showForces: 'Forces',
       results: 'Résultats',
-      rCl: 'Cz (portance)',
       rCd: 'Cx (traînée)',
-      rLd: 'Finesse Cz/Cx',
+      rRho: 'Masse volumique ρ',
+      hLd: 'Finesse',
       rQ: 'Pression dynamique q',
-      rLift: 'Portance',
       rDrag: 'Traînée',
       rRes: 'Résultante',
       rMass: 'Masse soutenue',
-      rWeight: 'Poids',
-      rVs: 'Vitesse de décrochage Vₛ',
       chart: 'Courbe Cz(α)',
       stall: 'Décrochage !',
       tooSlow: 'Trop lent pour voler !',
@@ -68,25 +65,22 @@
       speed: 'Airspeed V',
       altitude: 'Altitude',
       area: 'Wing area S',
-      mass: 'Aircraft mass',
+      mass: 'Mass',
+      aircraft: 'Aircraft',
       plGlider: 'Glider', plCessna: 'Cessna 172', plPc12: 'Pilatus PC-12',
       level: 'Level flight (automatic α)',
-      display: 'Display',
       showParticles: 'Particles',
       showStreamlines: 'Streamlines',
       showPressure: 'Pressure',
       showForces: 'Forces',
       results: 'Results',
-      rCl: 'CL (lift)',
       rCd: 'CD (drag)',
-      rLd: 'Lift-to-drag L/D',
+      rRho: 'Air density ρ',
+      hLd: 'L/D',
       rQ: 'Dynamic pressure q',
-      rLift: 'Lift',
       rDrag: 'Drag',
       rRes: 'Resultant',
       rMass: 'Supported mass',
-      rWeight: 'Weight',
-      rVs: 'Stall speed Vₛ',
       chart: 'CL(α) curve',
       stall: 'Stall!',
       tooSlow: 'Too slow to fly!',
@@ -525,21 +519,23 @@
     $('outCamber').textContent = `${fmt(state.camber, 1)} %`;
     $('outAlpha').textContent = `${fmt(state.alpha, 1)}°`;
     $('outSpeed').textContent = `${fmt(state.speed)} m/s · ${fmt(state.speed * 3.6)} km/h`;
-    $('outAltitude').textContent = `${fmt(state.altitude)} m · ρ = ${fmt(f.rho, 3)} kg/m³`;
+    $('outAltitude').textContent = `${fmt(state.altitude)} m`;
     $('outArea').textContent = `${fmt(state.area, 1)} m²`;
     $('outMass').textContent = fmtMass(state.mass);
 
-    $('rCl').textContent = fmt(aero.CL, 2);
+    const hasVs = Number.isFinite(f.vs);
+    $('hCl').textContent = fmt(aero.CL, 2);
+    $('hLd').textContent = fmt(aero.CL / aero.CD, 1);
+    $('hLift').textContent = fmtForce(f.lift);
+    $('hWeight').textContent = fmtForce(f.weight);
+    $('hVs').textContent = hasVs ? `${fmt(f.vs)} m/s` : '—';
+
     $('rCd').textContent = fmt(aero.CD, 3);
-    $('rLd').textContent = fmt(aero.CL / aero.CD, 1);
+    $('rRho').textContent = `${fmt(f.rho, 3)} kg/m³`;
     $('rQ').textContent = `${fmt(f.q)} Pa`;
-    $('rLift').textContent = fmtForce(f.lift);
     $('rDrag').textContent = fmtForce(f.drag);
     $('rRes').textContent = fmtForce(f.res);
     $('rMass').textContent = fmtMass(f.lift / G);
-    $('rWeight').textContent = fmtForce(f.weight);
-    const hasVs = Number.isFinite(f.vs);
-    $('rVs').textContent = hasVs ? `${fmt(f.vs)} m/s · ${fmt(f.vs * 3.6)} km/h` : '—';
 
     $('formula').textContent =
       `${tr('liftSym')} = ½ · ρ · V² · S · ${tr('cl')}\n` +
@@ -566,6 +562,12 @@
       if (p.thickness === state.thickness && p.camber === state.camber) current = name;
     }
     $('preset').value = current;
+
+    let plane = 'custom';
+    for (const [name, p] of Object.entries(PLANES)) {
+      if (p.mass === state.mass && p.area === state.area) plane = name;
+    }
+    $('plane').value = plane;
   }
 
   function applyLanguage() {
@@ -575,11 +577,6 @@
     document.title = tr('title');
     try { localStorage.setItem('lang', state.lang); } catch (e) { /* storage unavailable */ }
     render();
-  }
-
-  function updateLegend() {
-    $('legendSpeed').hidden = !state.show.particles;
-    $('legendPressure').hidden = !state.show.pressure;
   }
 
   // ---------- Wiring ----------
@@ -622,12 +619,12 @@
       updateShape();
     });
 
-    document.querySelectorAll('[data-plane]').forEach(btn => btn.addEventListener('click', () => {
-      Object.assign(state, PLANES[btn.dataset.plane]);
+    $('plane').addEventListener('change', e => {
+      Object.assign(state, PLANES[e.target.value]);
       $('mass').value = state.mass;
       $('area').value = state.area;
       flightChanged();
-    }));
+    });
 
     $('level').addEventListener('change', e => { setLevel(e.target.checked); updateAlpha(); });
 
@@ -637,10 +634,11 @@
         state.show[box.dataset.show] = box.checked;
         if (!state.show.particles) fxCtx.clearRect(0, 0, view.w, view.h);
         staticDirty = true;
-        updateLegend();
         drawOverlay();
       });
     });
+    // The legend holds the display toggles: clicking it must not tilt the wing.
+    $('legend').addEventListener('pointerdown', e => e.stopPropagation());
 
     document.querySelectorAll('[data-lang]').forEach(btn => btn.addEventListener('click', () => {
       state.lang = btn.dataset.lang;
@@ -709,7 +707,6 @@
   buildOverlay();
   bindControls();
   updateShape();
-  updateLegend();
   applyLanguage();
   new ResizeObserver(resize).observe(stage);
   new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }).observe(stage);

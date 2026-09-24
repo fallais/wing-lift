@@ -28,15 +28,30 @@
       <canvas id="bg"></canvas>
       <canvas id="fx"></canvas>
       <svg id="overlay" aria-hidden="true"></svg>
+      <div class="hud">
+        <div><span data-i18n="cl">Cz</span><b id="hCl"></b></div>
+        <div><span data-i18n="hLd">Finesse</span><b id="hLd"></b></div>
+        <div><span data-i18n="lift">Portance</span><b id="hLift" class="c-lift"></b></div>
+        <div><span data-i18n="weight">Poids</span><b id="hWeight" class="c-weight"></b></div>
+        <div><span>Vₛ</span><b id="hVs" class="c-vs"></b></div>
+      </div>
       <div class="badge-stall" id="stallBadge" data-i18n="stall">Décrochage !</div>
       <div class="badge-stall slow" id="slowBadge" data-i18n="tooSlow">Trop lent !</div>
-      <div class="legend">
-        <div class="legend-row" id="legendSpeed">
-          <span data-i18n="legSlow">lent</span><span class="bar speed"></span><span data-i18n="legFast">rapide</span>
-        </div>
-        <div class="legend-row" id="legendPressure">
-          <span data-i18n="legLow">dépression</span><span class="bar pressure"></span><span data-i18n="legHigh">surpression</span>
-        </div>
+      <div class="legend" id="legend">
+        <label class="legend-row">
+          <input type="checkbox" data-show="particles"><span class="name" data-i18n="showParticles">Particules</span>
+          <span class="scale"><span data-i18n="legSlow">lent</span><span class="bar speed"></span><span data-i18n="legFast">rapide</span></span>
+        </label>
+        <label class="legend-row">
+          <input type="checkbox" data-show="pressure"><span class="name" data-i18n="showPressure">Pression</span>
+          <span class="scale"><span data-i18n="legLow">dépression</span><span class="bar pressure"></span><span data-i18n="legHigh">surpression</span></span>
+        </label>
+        <label class="legend-row">
+          <input type="checkbox" data-show="streamlines"><span class="name" data-i18n="showStreamlines">Lignes de courant</span>
+        </label>
+        <label class="legend-row">
+          <input type="checkbox" data-show="forces"><span class="name" data-i18n="showForces">Forces</span>
+        </label>
       </div>
       <div class="hint" data-i18n="hint">Glissez verticalement pour incliner l'aile</div>
     </section>
@@ -51,13 +66,15 @@
           <option value="cambered" data-i18n="pCambered">Très cambré</option>
           <option value="custom" data-i18n="pCustom" disabled>Personnalisé</option>
         </select>
-        <div class="field">
-          <div class="row"><label for="thickness" data-i18n="thickness">Épaisseur</label><output id="outThickness"></output></div>
-          <input type="range" id="thickness" min="1" max="25" step="0.5">
-        </div>
-        <div class="field">
-          <div class="row"><label for="camber" data-i18n="camber">Cambrure</label><output id="outCamber"></output></div>
-          <input type="range" id="camber" min="-10" max="12" step="0.5">
+        <div class="pair">
+          <div class="field">
+            <div class="row"><label for="thickness" data-i18n="thickness">Épaisseur</label><output id="outThickness"></output></div>
+            <input type="range" id="thickness" min="1" max="25" step="0.5">
+          </div>
+          <div class="field">
+            <div class="row"><label for="camber" data-i18n="camber">Cambrure</label><output id="outCamber"></output></div>
+            <input type="range" id="camber" min="-10" max="12" step="0.5">
+          </div>
         </div>
       </section>
 
@@ -71,61 +88,53 @@
           <div class="row"><label for="speed" data-i18n="speed">Vitesse V</label><output id="outSpeed"></output></div>
           <div class="range-wrap">
             <input type="range" id="speed" min="0" max="100" step="1">
-            <div class="vs-zone" id="vsZone"><span>V<sub>s</sub></span></div>
+            <div class="vs-zone" id="vsZone"><span>Vₛ</span></div>
           </div>
         </div>
-        <div class="field">
-          <div class="row"><label for="altitude" data-i18n="altitude">Altitude</label><output id="outAltitude"></output></div>
-          <input type="range" id="altitude" min="0" max="10000" step="100">
-        </div>
-        <div class="field">
-          <div class="row"><label for="area" data-i18n="area">Surface alaire S</label><output id="outArea"></output></div>
-          <input type="range" id="area" min="1" max="60" step="0.5">
-        </div>
-        <div class="field">
-          <div class="row"><label for="mass" data-i18n="mass">Masse de l'avion</label><output id="outMass"></output></div>
-          <input type="range" id="mass" min="100" max="8000" step="50">
-        </div>
-        <div class="presets planes">
-          <button data-plane="glider" data-i18n="plGlider">Planeur</button>
-          <button data-plane="cessna" data-i18n="plCessna">Cessna 172</button>
-          <button data-plane="pc12" data-i18n="plPc12">Pilatus PC-12</button>
+        <div class="pair">
+          <div class="field">
+            <div class="row"><label for="altitude" data-i18n="altitude">Altitude</label><output id="outAltitude"></output></div>
+            <input type="range" id="altitude" min="0" max="10000" step="100">
+          </div>
+          <div class="field">
+            <div class="row"><label for="area" data-i18n="area">Surface S</label><output id="outArea"></output></div>
+            <input type="range" id="area" min="1" max="60" step="0.5">
+          </div>
+          <div class="field">
+            <div class="row"><label for="mass" data-i18n="mass">Masse</label><output id="outMass"></output></div>
+            <input type="range" id="mass" min="100" max="8000" step="50">
+          </div>
+          <div class="field">
+            <div class="row"><label for="plane" data-i18n="aircraft">Avion</label></div>
+            <select id="plane" class="select">
+              <option value="glider" data-i18n="plGlider">Planeur</option>
+              <option value="cessna" data-i18n="plCessna">Cessna 172</option>
+              <option value="pc12" data-i18n="plPc12">Pilatus PC-12</option>
+              <option value="custom" data-i18n="pCustom" disabled>Personnalisé</option>
+            </select>
+          </div>
         </div>
         <label class="level"><input type="checkbox" id="level"> <span data-i18n="level">Vol en palier (α automatique)</span></label>
-      </section>
-
-      <section class="card">
-        <h2 data-i18n="display">Affichage</h2>
-        <div class="toggles">
-          <label><input type="checkbox" data-show="particles"> <span data-i18n="showParticles">Particules</span></label>
-          <label><input type="checkbox" data-show="streamlines"> <span data-i18n="showStreamlines">Lignes de courant</span></label>
-          <label><input type="checkbox" data-show="pressure"> <span data-i18n="showPressure">Pression</span></label>
-          <label><input type="checkbox" data-show="forces"> <span data-i18n="showForces">Forces</span></label>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2 data-i18n="results">Résultats</h2>
-        <dl class="readouts">
-          <dt data-i18n="rCl">Cz</dt><dd id="rCl"></dd>
-          <dt data-i18n="rCd">Cx</dt><dd id="rCd"></dd>
-          <dt data-i18n="rLd">Finesse</dt><dd id="rLd"></dd>
-          <dt data-i18n="rQ">Pression dynamique q</dt><dd id="rQ"></dd>
-          <dt data-i18n="rLift">Portance</dt><dd id="rLift" class="c-lift"></dd>
-          <dt data-i18n="rDrag">Traînée</dt><dd id="rDrag" class="c-drag"></dd>
-          <dt data-i18n="rRes">Résultante</dt><dd id="rRes" class="c-res"></dd>
-          <dt data-i18n="rMass">Masse soutenue</dt><dd id="rMass"></dd>
-          <dt data-i18n="rWeight">Poids</dt><dd id="rWeight" class="c-weight"></dd>
-          <dt data-i18n="rVs">Vitesse de décrochage V<sub>s</sub></dt><dd id="rVs" class="c-vs"></dd>
-        </dl>
-        <div class="formula" id="formula"></div>
-        <div class="formula" id="formulaVs"></div>
       </section>
 
       <section class="card">
         <h2 data-i18n="chart">Courbe Cz(α)</h2>
         <svg id="chart" class="chart" viewBox="0 0 300 170"></svg>
         <p class="caption" id="chartCaption"></p>
+      </section>
+
+      <section class="card">
+        <h2 data-i18n="results">Résultats</h2>
+        <dl class="readouts">
+          <dt data-i18n="rCd">Cx</dt><dd id="rCd"></dd>
+          <dt data-i18n="rRho">Masse volumique ρ</dt><dd id="rRho"></dd>
+          <dt data-i18n="rQ">Pression dynamique q</dt><dd id="rQ"></dd>
+          <dt data-i18n="rDrag">Traînée</dt><dd id="rDrag" class="c-drag"></dd>
+          <dt data-i18n="rRes">Résultante</dt><dd id="rRes" class="c-res"></dd>
+          <dt data-i18n="rMass">Masse soutenue</dt><dd id="rMass"></dd>
+        </dl>
+        <div class="formula" id="formula"></div>
+        <div class="formula" id="formulaVs"></div>
       </section>
     </aside>
   </main>
