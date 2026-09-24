@@ -33,8 +33,10 @@
         <button id="windDown" aria-label="−">−</button>
         <output id="windOut"></output>
         <button id="windUp" aria-label="+">+</button>
+        <span class="wind-vs" id="windVs"></span>
       </div>
       <div class="badge-stall" id="stallBadge" data-i18n="stall">Décrochage !</div>
+      <div class="badge-stall slow" id="slowBadge" data-i18n="tooSlow">Trop lent !</div>
       <div class="legend">
         <div class="legend-row" id="legendSpeed">
           <span data-i18n="legSlow">lent</span><span class="bar speed"></span><span data-i18n="legFast">rapide</span>
@@ -74,7 +76,10 @@
         </div>
         <div class="field">
           <div class="row"><label for="speed" data-i18n="speed">Vitesse V</label><output id="outSpeed"></output></div>
-          <input type="range" id="speed" min="0" max="100" step="1">
+          <div class="range-wrap">
+            <input type="range" id="speed" min="0" max="100" step="1">
+            <div class="vs-zone" id="vsZone"><span>V<sub>s</sub></span></div>
+          </div>
         </div>
         <div class="field">
           <div class="row"><label for="altitude" data-i18n="altitude">Altitude</label><output id="outAltitude"></output></div>
@@ -84,6 +89,16 @@
           <div class="row"><label for="area" data-i18n="area">Surface alaire S</label><output id="outArea"></output></div>
           <input type="range" id="area" min="1" max="60" step="0.5">
         </div>
+        <div class="field">
+          <div class="row"><label for="mass" data-i18n="mass">Masse de l'avion</label><output id="outMass"></output></div>
+          <input type="range" id="mass" min="100" max="8000" step="50">
+        </div>
+        <div class="presets planes">
+          <button data-plane="glider" data-i18n="plGlider">Planeur</button>
+          <button data-plane="cessna" data-i18n="plCessna">Cessna 172</button>
+          <button data-plane="pc12" data-i18n="plPc12">Pilatus PC-12</button>
+        </div>
+        <label class="level"><input type="checkbox" id="level"> <span data-i18n="level">Vol en palier (α automatique)</span></label>
       </section>
 
       <section class="card">
@@ -107,8 +122,11 @@
           <dt data-i18n="rDrag">Traînée</dt><dd id="rDrag" class="c-drag"></dd>
           <dt data-i18n="rRes">Résultante</dt><dd id="rRes" class="c-res"></dd>
           <dt data-i18n="rMass">Masse soutenue</dt><dd id="rMass"></dd>
+          <dt data-i18n="rWeight">Poids</dt><dd id="rWeight" class="c-weight"></dd>
+          <dt data-i18n="rVs">Vitesse de décrochage V<sub>s</sub></dt><dd id="rVs" class="c-vs"></dd>
         </dl>
         <div class="formula" id="formula"></div>
+        <div class="formula" id="formulaVs"></div>
       </section>
 
       <section class="card">
@@ -158,6 +176,12 @@
         <dd>Épaisseur maximale du profil, en % de la corde. Un profil plus épais décroche plus doucement, mais traîne un peu plus.</dd>
         <dt>Masse soutenue</dt>
         <dd>Portance divisée par g (9,81 m/s²) : la masse que l'aile peut porter en vol stabilisé.</dd>
+        <dt>Poids</dt>
+        <dd>m · g : la force qui tire l'avion vers le bas (flèche violette). En vol en palier, la portance l'équilibre exactement.</dd>
+        <dt>Vitesse de décrochage (V<sub>s</sub>)</dt>
+        <dd>V<sub>s</sub> = √(2 · m · g / (ρ · S · Cz<sub>max</sub>)) : la vitesse en dessous de laquelle l'aile ne peut plus porter l'avion, même à l'incidence maximale. Le décrochage arrive toujours au même angle ; la vitesse décide seulement à quel point il faut s'en approcher. V<sub>s</sub> augmente avec la masse et l'altitude, et diminue avec une aile plus grande ou plus cambrée (d'où les volets).</dd>
+        <dt>Vol en palier</dt>
+        <dd>Vol à altitude constante : portance = poids. Plus on vole lentement, plus il faut d'incidence, jusqu'à atteindre le décrochage à V<sub>s</sub>.</dd>
       </dl>
 
       <h3>Ce qu'on voit</h3>
@@ -207,6 +231,12 @@
         <dd>Maximum thickness as a % of the chord. Thicker airfoils stall more gently but have a bit more drag.</dd>
         <dt>Supported mass</dt>
         <dd>Lift divided by g (9.81 m/s²): the mass the wing can hold up in level flight.</dd>
+        <dt>Weight</dt>
+        <dd>m · g: the force pulling the aircraft down (purple arrow). In level flight, lift balances it exactly.</dd>
+        <dt>Stall speed (V<sub>s</sub>)</dt>
+        <dd>V<sub>s</sub> = √(2 · m · g / (ρ · S · C<sub>L max</sub>)): the speed below which the wing can no longer hold the aircraft up, even at its maximum angle. The stall always happens at the same angle; speed only decides how close to it you must fly. V<sub>s</sub> rises with mass and altitude, and drops with a bigger or more cambered wing (hence flaps).</dd>
+        <dt>Level flight</dt>
+        <dd>Flying at constant altitude: lift = weight. The slower you fly, the more angle you need, until you reach the stall at V<sub>s</sub>.</dd>
       </dl>
 
       <h3>What you see</h3>

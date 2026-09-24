@@ -27,6 +27,9 @@
       speed: 'Vitesse V',
       altitude: 'Altitude',
       area: 'Surface alaire S',
+      mass: "Masse de l'avion",
+      plGlider: 'Planeur', plCessna: 'Cessna 172', plPc12: 'Pilatus PC-12',
+      level: 'Vol en palier (α automatique)',
       display: 'Affichage',
       showParticles: 'Particules',
       showStreamlines: 'Lignes de courant',
@@ -41,12 +44,15 @@
       rDrag: 'Traînée',
       rRes: 'Résultante',
       rMass: 'Masse soutenue',
+      rWeight: 'Poids',
+      rVs: 'Vitesse de décrochage Vₛ',
       chart: 'Courbe Cz(α)',
       stall: 'Décrochage !',
+      tooSlow: 'Trop lent pour voler !',
       hint: "Glissez verticalement pour incliner l'aile",
       legSlow: 'lent', legFast: 'rapide', legLow: 'dépression', legHigh: 'surpression',
       wind: 'Vent relatif',
-      lift: 'Portance', drag: 'Traînée', res: 'Résultante',
+      lift: 'Portance', drag: 'Traînée', res: 'Résultante', weight: 'Poids',
       cl: 'Cz', liftSym: 'P',
       caption: (z, s) => `Portance nulle à α = ${z}° · décrochage vers ${s}°`,
     },
@@ -71,6 +77,9 @@
       speed: 'Airspeed V',
       altitude: 'Altitude',
       area: 'Wing area S',
+      mass: 'Aircraft mass',
+      plGlider: 'Glider', plCessna: 'Cessna 172', plPc12: 'Pilatus PC-12',
+      level: 'Level flight (automatic α)',
       display: 'Display',
       showParticles: 'Particles',
       showStreamlines: 'Streamlines',
@@ -85,15 +94,25 @@
       rDrag: 'Drag',
       rRes: 'Resultant',
       rMass: 'Supported mass',
+      rWeight: 'Weight',
+      rVs: 'Stall speed Vₛ',
       chart: 'CL(α) curve',
       stall: 'Stall!',
+      tooSlow: 'Too slow to fly!',
       hint: 'Drag vertically to tilt the wing',
       legSlow: 'slow', legFast: 'fast', legLow: 'low pressure', legHigh: 'high pressure',
       wind: 'Relative wind',
-      lift: 'Lift', drag: 'Drag', res: 'Resultant',
+      lift: 'Lift', drag: 'Drag', res: 'Resultant', weight: 'Weight',
       cl: 'CL', liftSym: 'L',
       caption: (z, s) => `Zero lift at α = ${z}° · stall around ${s}°`,
     },
+  };
+
+  // Rounded to the slider steps.
+  const PLANES = {
+    glider: { mass: 600, area: 18 },
+    cessna: { mass: 1100, area: 16 },
+    pc12: { mass: 4750, area: 26 },
   };
 
   const SPEED_BUCKETS = [0.6, 0.85, 0.95, 1.05, 1.2, 1.45, Infinity];
@@ -107,6 +126,8 @@
     speed: 50,
     altitude: 0,
     area: 16,
+    mass: 1100,
+    level: false,
     show: { particles: true, streamlines: false, pressure: true, forces: true },
   };
 
@@ -119,7 +140,7 @@
   const tmp = { u: 0, v: 0, inside: false };
 
   const view = { w: 0, h: 0, s: 1, cx: 0, cy: 0, x0: 0, x1: 0, y0: 0, y1: 0 };
-  let af, aero, flow, wake = null;
+  let af, aero, flow, clMax, wake = null;
   let staticDirty = true;
   let time = 0;
 
@@ -139,17 +160,40 @@
     const q = 0.5 * rho * state.speed ** 2;
     const lift = q * state.area * aero.CL;
     const drag = q * state.area * aero.CD;
-    return { rho, q, lift, drag, res: Math.hypot(lift, drag) };
+    const weight = state.mass * G;
+    // Slowest speed at which the wing can still carry the weight, at its best angle.
+    const vs = clMax > 0 ? Math.sqrt(2 * weight / (rho * state.area * clMax)) : Infinity;
+    return { rho, q, lift, drag, res: Math.hypot(lift, drag), weight, vs };
+  }
+
+  // Angle where lift equals weight, searched on the unstalled part of the curve.
+  function levelAlpha() {
+    const f = forces();
+    const target = f.q > 0 ? f.weight / (f.q * state.area) : Infinity;
+    const ref = Aero.coefficients(af, 0);
+    let lo = Math.max(-20, ref.stallNeg), hi = Math.min(25, ref.stallPos);
+    if (target >= Aero.coefficients(af, hi).CL) return hi;
+    if (target <= Aero.coefficients(af, lo).CL) return lo;
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2;
+      if (Aero.coefficients(af, mid).CL < target) lo = mid; else hi = mid;
+    }
+    return Math.round(lo * 100) / 100;
   }
 
   // ---------- Simulation state ----------
 
   function updateShape() {
     af = Aero.makeAirfoil(state.thickness, state.camber);
+    clMax = Aero.coefficients(af, Aero.coefficients(af, 0).stallPos).CL;
     updateAlpha();
   }
 
   function updateAlpha() {
+    if (state.level) {
+      state.alpha = levelAlpha();
+      $('alpha').value = state.alpha;
+    }
     aero = Aero.coefficients(af, state.alpha);
     flow = Aero.flowFor(af, state.alpha);
     updateWake();
@@ -362,11 +406,12 @@
       <path id="wing" class="wing"/>
       <g id="forces">
         <line id="compL" class="comp"/><line id="compD" class="comp"/>
-        ${arrow('arrDrag', 'drag')}${arrow('arrLift', 'lift')}${arrow('arrRes', 'res')}
+        ${arrow('arrWeight', 'weight')}${arrow('arrDrag', 'drag')}${arrow('arrLift', 'lift')}${arrow('arrRes', 'res')}
         <circle id="acDot" class="ac" r="4"/>
         <text id="liftLabel" class="lbl" text-anchor="end"/>
         <text id="dragLabel" class="lbl"/>
         <text id="resLabel" class="lbl"/>
+        <text id="weightLabel" class="lbl" text-anchor="end"/>
       </g>`;
   }
 
@@ -424,25 +469,28 @@
     const f = forces();
     let k = 1.5 * view.s / Q_REF;
     const maxLen = 0.42 * view.h;
-    const longest = Math.max(Math.abs(f.lift), Math.abs(f.drag), f.res) * k;
+    const longest = Math.max(Math.abs(f.lift), Math.abs(f.drag), f.res, f.weight) * k;
     if (longest > maxLen) k *= maxLen / longest;
 
     const ac = wingToScreen(af.ac);
     const lift = { x: ac.x, y: ac.y - f.lift * k };
     const drag = { x: ac.x + f.drag * k, y: ac.y };
     const res = { x: drag.x, y: lift.y };
+    const weight = { x: ac.x, y: ac.y + f.weight * k };
 
     attr($('compL'), { x1: lift.x, y1: lift.y, x2: res.x, y2: res.y });
     attr($('compD'), { x1: drag.x, y1: drag.y, x2: res.x, y2: res.y });
     setArrow('arrLift', ac.x, ac.y, lift.x, lift.y);
     setArrow('arrDrag', ac.x, ac.y, drag.x, drag.y);
     setArrow('arrRes', ac.x, ac.y, res.x, res.y);
+    setArrow('arrWeight', ac.x, ac.y, weight.x, weight.y);
     attr($('acDot'), { cx: ac.x, cy: ac.y });
 
     const up = f.lift >= 0 ? -1 : 1;
     setLabel('liftLabel', lift.x - 10, lift.y + up * 2 + 4, `${tr('lift')} ${fmtForce(f.lift)}`);
     setLabel('resLabel', res.x + 10, res.y + up * 2 + 4, `${tr('res')} ${fmtForce(f.res)}`);
     setLabel('dragLabel', drag.x + 10, drag.y - up * 26, `${tr('drag')} ${fmtForce(f.drag)}`);
+    setLabel('weightLabel', weight.x - 10, weight.y - 2, `${tr('weight')} ${fmtForce(f.weight)}`);
   }
 
   // ---------- Panel ----------
@@ -470,6 +518,11 @@
     s += `<polyline class="curve" points="${pts.join(' ')}"/>`;
     s += `<text x="${L + 4}" y="${T + 10}">${tr('cl')}</text><text x="${W - R - 2}" y="${Y(0) - 4}" text-anchor="end">α</text>`;
 
+    // Lift coefficient needed to carry the weight at the current speed.
+    const f = forces();
+    const clReq = f.q > 0 ? f.weight / (f.q * state.area) : Infinity;
+    if (clReq <= C1) s += `<line class="req" x1="${L}" x2="${W - R}" y1="${Y(clReq)}" y2="${Y(clReq)}"/>`;
+
     const cx = X(state.alpha), cy = Y(aero.CL);
     s += `<line class="guide" x1="${cx}" x2="${cx}" y1="${H - B}" y2="${cy}"/>`;
     s += `<circle class="dot" cx="${cx}" cy="${cy}" r="5"/>`;
@@ -488,6 +541,7 @@
     $('windOut').textContent = speedText;
     $('outAltitude').textContent = `${fmt(state.altitude)} m · ρ = ${fmt(f.rho, 3)} kg/m³`;
     $('outArea').textContent = `${fmt(state.area, 1)} m²`;
+    $('outMass').textContent = fmtMass(state.mass);
 
     $('rCl').textContent = fmt(aero.CL, 2);
     $('rCd').textContent = fmt(aero.CD, 3);
@@ -497,11 +551,26 @@
     $('rDrag').textContent = fmtForce(f.drag);
     $('rRes').textContent = fmtForce(f.res);
     $('rMass').textContent = fmtMass(f.lift / G);
+    $('rWeight').textContent = fmtForce(f.weight);
+    const hasVs = Number.isFinite(f.vs);
+    $('rVs').textContent = hasVs ? `${fmt(f.vs)} m/s · ${fmt(f.vs * 3.6)} km/h` : '—';
 
     $('formula').textContent =
       `${tr('liftSym')} = ½ · ρ · V² · S · ${tr('cl')}\n` +
       `= ½ · ${fmt(f.rho, 3)} · ${fmt(state.speed)}² · ${fmt(state.area, 1)} · ${fmt(aero.CL, 2)}\n` +
       `≈ ${fmtForce(f.lift)}`;
+    $('formulaVs').textContent =
+      `Vₛ = √(2 · m · g / (ρ · S · ${tr('cl')}max))\n` +
+      `= √(2 · ${fmt(state.mass)} · ${fmt(G, 2)} / (${fmt(f.rho, 3)} · ${fmt(state.area, 1)} · ${fmt(clMax, 2)}))\n` +
+      `≈ ${hasVs ? fmt(f.vs) + ' m/s' : '∞'}`;
+
+    const slow = state.speed < f.vs;
+    $('slowBadge').classList.toggle('on', slow);
+    $('windOut').classList.toggle('below', slow);
+    $('windVs').textContent = hasVs ? `Vₛ ${fmt(f.vs)}` : '';
+    const zone = $('vsZone');
+    zone.hidden = !hasVs;
+    zone.style.width = `calc((100% - 16px) * ${Math.min(1, f.vs / 100)})`;
 
     $('stallBadge').classList.toggle('on', aero.stall > 0);
     updatePresetUI();
@@ -532,7 +601,16 @@
 
   // ---------- Wiring ----------
 
+  function setLevel(on) {
+    state.level = on;
+    $('level').checked = on;
+  }
+
+  // Speed, density, area and mass change the angle needed for level flight.
+  const flightChanged = () => state.level ? updateAlpha() : render();
+
   function setAlpha(value) {
+    setLevel(false);
     state.alpha = Math.round(Math.max(-20, Math.min(25, value)) * 10) / 10;
     $('alpha').value = state.alpha;
     updateAlpha();
@@ -542,10 +620,11 @@
     const ranges = {
       thickness: updateShape,
       camber: updateShape,
-      alpha: updateAlpha,
-      speed: render,
-      altitude: render,
-      area: render,
+      alpha: () => { setLevel(false); updateAlpha(); },
+      speed: flightChanged,
+      altitude: flightChanged,
+      area: flightChanged,
+      mass: flightChanged,
     };
     for (const [key, onChange] of Object.entries(ranges)) {
       const input = $(key);
@@ -559,6 +638,15 @@
       $('camber').value = state.camber;
       updateShape();
     }));
+
+    document.querySelectorAll('[data-plane]').forEach(btn => btn.addEventListener('click', () => {
+      Object.assign(state, PLANES[btn.dataset.plane]);
+      $('mass').value = state.mass;
+      $('area').value = state.area;
+      flightChanged();
+    }));
+
+    $('level').addEventListener('change', e => { setLevel(e.target.checked); updateAlpha(); });
 
     document.querySelectorAll('[data-show]').forEach(box => {
       box.checked = state.show[box.dataset.show];
@@ -579,7 +667,7 @@
     const setSpeed = v => {
       state.speed = Math.max(0, Math.min(100, v));
       $('speed').value = state.speed;
-      render();
+      flightChanged();
     };
     $('windDown').addEventListener('click', () => setSpeed(state.speed - 5));
     $('windUp').addEventListener('click', () => setSpeed(state.speed + 5));
