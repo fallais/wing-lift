@@ -18,8 +18,4 @@ No framework and no build step: plain HTML, CSS and JavaScript (Canvas for the f
 
 ## Run locally
 
-Open `index.html` in a browser, or serve the folder:
-
-```sh
-python3 -m http.server
-```
+Open `index.html` in a browser.
