@@ -114,7 +114,7 @@
     camber: 5,
     alpha: 5,
     speed: 50,
-    altitude: 0,
+    altitude: 1500,
     area: 16,
     mass: 1100,
     level: false,
