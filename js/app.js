@@ -15,11 +15,7 @@
       pSymmetric: 'Symétrique',
       pFlat: 'Plaque plane',
       pCambered: 'Très cambré',
-      dClassic: "Extrados bombé, intrados presque plat : le profil d'un avion léger. Il porte même à 0°.",
-      dSymmetric: 'Même courbure dessus et dessous : aucune portance à 0°. Avions de voltige, dérives.',
-      dFlat: 'Une simple plaque : elle porte un peu, mais décroche tôt.',
-      dCambered: 'Forte courbure : beaucoup de portance à basse vitesse (planeurs lents, oiseaux).',
-      dCustom: 'Profil personnalisé : réglez épaisseur et cambrure.',
+      pCustom: 'Personnalisé',
       thickness: 'Épaisseur',
       camber: 'Cambrure',
       flight: 'Vol',
@@ -51,7 +47,6 @@
       tooSlow: 'Trop lent pour voler !',
       hint: "Glissez verticalement pour incliner l'aile",
       legSlow: 'lent', legFast: 'rapide', legLow: 'dépression', legHigh: 'surpression',
-      wind: 'Vent relatif',
       lift: 'Portance', drag: 'Traînée', res: 'Résultante', weight: 'Poids',
       cl: 'Cz', liftSym: 'P',
       caption: (z, s) => `Portance nulle à α = ${z}° · décrochage vers ${s}°`,
@@ -65,11 +60,7 @@
       pSymmetric: 'Symmetric',
       pFlat: 'Flat plate',
       pCambered: 'High camber',
-      dClassic: 'Curved top, nearly flat bottom: a typical light aircraft airfoil. It lifts even at 0°.',
-      dSymmetric: 'Same curve on both sides: no lift at 0°. Aerobatic planes, tail fins.',
-      dFlat: 'A simple plate: it lifts a little, but stalls early.',
-      dCambered: 'Strong curvature: lots of lift at low speed (slow gliders, birds).',
-      dCustom: 'Custom airfoil: set thickness and camber yourself.',
+      pCustom: 'Custom',
       thickness: 'Thickness',
       camber: 'Camber',
       flight: 'Flight',
@@ -101,7 +92,6 @@
       tooSlow: 'Too slow to fly!',
       hint: 'Drag vertically to tilt the wing',
       legSlow: 'slow', legFast: 'fast', legLow: 'low pressure', legHigh: 'high pressure',
-      wind: 'Relative wind',
       lift: 'Lift', drag: 'Drag', res: 'Resultant', weight: 'Weight',
       cl: 'CL', liftSym: 'L',
       caption: (z, s) => `Zero lift at α = ${z}° · stall around ${s}°`,
@@ -402,7 +392,6 @@
       <line id="chordLine" class="ref"/>
       <path id="alphaArc" class="arc"/>
       <text id="alphaLabel" class="lbl alpha"/>
-      ${arrow('arrWind', 'wind')}
       <path id="wing" class="wing"/>
       <g id="forces">
         <line id="compL" class="comp"/><line id="compD" class="comp"/>
@@ -459,7 +448,6 @@
     setLabel('alphaLabel', te.x + r * 1.08 * Math.cos(phi / 2) + 4, te.y + r * 1.08 * Math.sin(phi / 2) + 4,
       `α = ${fmt(state.alpha, 1)}°`);
 
-    setArrow('arrWind', 18, 60, 18 + 20 + state.speed * 1.6, 60);
 
     const group = $('forces');
     group.style.display = state.show.forces ? '' : 'none';
@@ -536,9 +524,7 @@
     $('outThickness').textContent = `${fmt(state.thickness, 1)} %`;
     $('outCamber').textContent = `${fmt(state.camber, 1)} %`;
     $('outAlpha').textContent = `${fmt(state.alpha, 1)}°`;
-    const speedText = `${fmt(state.speed)} m/s · ${fmt(state.speed * 3.6)} km/h`;
-    $('outSpeed').textContent = speedText;
-    $('windOut').textContent = speedText;
+    $('outSpeed').textContent = `${fmt(state.speed)} m/s · ${fmt(state.speed * 3.6)} km/h`;
     $('outAltitude').textContent = `${fmt(state.altitude)} m · ρ = ${fmt(f.rho, 3)} kg/m³`;
     $('outArea').textContent = `${fmt(state.area, 1)} m²`;
     $('outMass').textContent = fmtMass(state.mass);
@@ -566,8 +552,6 @@
 
     const slow = state.speed < f.vs;
     $('slowBadge').classList.toggle('on', slow);
-    $('windOut').classList.toggle('below', slow);
-    $('windVs').textContent = hasVs ? `Vₛ ${fmt(f.vs)}` : '';
     const zone = $('vsZone');
     zone.hidden = !hasVs;
     zone.style.width = `calc((100% - 16px) * ${Math.min(1, f.vs / 100)})`;
@@ -581,8 +565,7 @@
     for (const [name, p] of Object.entries(Aero.PRESETS)) {
       if (p.thickness === state.thickness && p.camber === state.camber) current = name;
     }
-    document.querySelectorAll('[data-preset]').forEach(b => b.classList.toggle('active', b.dataset.preset === current));
-    $('presetDesc').textContent = tr('d' + current[0].toUpperCase() + current.slice(1));
+    $('preset').value = current;
   }
 
   function applyLanguage() {
@@ -632,12 +615,12 @@
       input.addEventListener('input', () => { state[key] = +input.value; onChange(); });
     }
 
-    document.querySelectorAll('[data-preset]').forEach(btn => btn.addEventListener('click', () => {
-      Object.assign(state, Aero.PRESETS[btn.dataset.preset]);
+    $('preset').addEventListener('change', e => {
+      Object.assign(state, Aero.PRESETS[e.target.value]);
       $('thickness').value = state.thickness;
       $('camber').value = state.camber;
       updateShape();
-    }));
+    });
 
     document.querySelectorAll('[data-plane]').forEach(btn => btn.addEventListener('click', () => {
       Object.assign(state, PLANES[btn.dataset.plane]);
@@ -663,15 +646,6 @@
       state.lang = btn.dataset.lang;
       applyLanguage();
     }));
-
-    const setSpeed = v => {
-      state.speed = Math.max(0, Math.min(100, v));
-      $('speed').value = state.speed;
-      flightChanged();
-    };
-    $('windDown').addEventListener('click', () => setSpeed(state.speed - 5));
-    $('windUp').addEventListener('click', () => setSpeed(state.speed + 5));
-    document.querySelector('.wind-ctrl').addEventListener('pointerdown', e => e.stopPropagation());
 
     $('helpBtn').addEventListener('click', () => $('help').showModal());
     $('help').addEventListener('click', e => { if (e.target === $('help')) $('help').close(); });

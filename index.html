@@ -28,13 +28,6 @@
       <canvas id="bg"></canvas>
       <canvas id="fx"></canvas>
       <svg id="overlay" aria-hidden="true"></svg>
-      <div class="wind-ctrl">
-        <span data-i18n="wind">Vent relatif</span>
-        <button id="windDown" aria-label="−">−</button>
-        <output id="windOut"></output>
-        <button id="windUp" aria-label="+">+</button>
-        <span class="wind-vs" id="windVs"></span>
-      </div>
       <div class="badge-stall" id="stallBadge" data-i18n="stall">Décrochage !</div>
       <div class="badge-stall slow" id="slowBadge" data-i18n="tooSlow">Trop lent !</div>
       <div class="legend">
@@ -51,13 +44,13 @@
     <aside class="panel">
       <section class="card">
         <h2 data-i18n="profile">Profil</h2>
-        <div class="presets">
-          <button data-preset="classic" data-i18n="pClassic">Classique</button>
-          <button data-preset="symmetric" data-i18n="pSymmetric">Symétrique</button>
-          <button data-preset="flat" data-i18n="pFlat">Plaque plane</button>
-          <button data-preset="cambered" data-i18n="pCambered">Très cambré</button>
-        </div>
-        <p class="preset-desc" id="presetDesc"></p>
+        <select id="preset" class="select" aria-label="Profil">
+          <option value="classic" data-i18n="pClassic">Classique</option>
+          <option value="symmetric" data-i18n="pSymmetric">Symétrique</option>
+          <option value="flat" data-i18n="pFlat">Plaque plane</option>
+          <option value="cambered" data-i18n="pCambered">Très cambré</option>
+          <option value="custom" data-i18n="pCustom" disabled>Personnalisé</option>
+        </select>
         <div class="field">
           <div class="row"><label for="thickness" data-i18n="thickness">Épaisseur</label><output id="outThickness"></output></div>
           <input type="range" id="thickness" min="1" max="25" step="0.5">
