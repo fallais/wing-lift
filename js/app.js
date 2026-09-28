@@ -31,6 +31,7 @@
       showStreamlines: 'Lignes de courant',
       showPressure: 'Pression',
       showForces: 'Forces',
+      stallAlarm: 'Alarme de décrochage',
       results: 'Résultats',
       rCd: 'Cx (traînée)',
       rRho: 'Masse volumique ρ',
@@ -75,6 +76,7 @@
       showStreamlines: 'Streamlines',
       showPressure: 'Pressure',
       showForces: 'Forces',
+      stallAlarm: 'Stall warning',
       results: 'Results',
       rCd: 'CD (drag)',
       rRho: 'Air density ρ',
@@ -124,6 +126,7 @@
     area: 16,
     mass: 1100,
     level: false,
+    alarm: false,
     show: { particles: true, streamlines: false, pressure: true, forces: true },
   };
 
@@ -180,7 +183,48 @@
     aero = Aero.coefficients(af, state.alpha);
     flow = Aero.flowFor(af, state.alpha);
     scene.setFlow(af, flow, aero, state.show);
+    updateAlarm();
     render();
+  }
+
+  // ---------- Stall warning ----------
+
+  // Like the real ones, it sounds a little before the stall angle, and keeps going once stalled.
+  const ALARM_MARGIN = 1;
+  let alarm = null;
+
+  function stallWarning() {
+    return aero.stall > 0 || state.alpha >= aero.stallPos - ALARM_MARGIN;
+  }
+
+  // A 1 kHz tone chopped at 5 Hz by a square LFO: bip-bip-bip.
+  function createAlarm() {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const tone = ctx.createOscillator();
+    tone.type = 'square';
+    tone.frequency.value = 1000;
+    const chop = ctx.createGain();
+    chop.gain.value = 0.5;
+    const lfo = ctx.createOscillator();
+    lfo.type = 'square';
+    lfo.frequency.value = 5;
+    const lfoDepth = ctx.createGain();
+    lfoDepth.gain.value = 0.5;
+    lfo.connect(lfoDepth).connect(chop.gain);
+    const volume = ctx.createGain();
+    volume.gain.value = 0;
+    tone.connect(chop).connect(volume).connect(ctx.destination);
+    tone.start();
+    lfo.start();
+    return { ctx, volume };
+  }
+
+  function updateAlarm() {
+    if (!state.alarm || !aero) { if (alarm) alarm.volume.gain.setTargetAtTime(0, alarm.ctx.currentTime, 0.01); return; }
+    // Created on the checkbox click: browsers only allow audio after a user gesture.
+    if (!alarm) alarm = createAlarm();
+    const on = stallWarning() && !document.hidden;
+    alarm.volume.gain.setTargetAtTime(on ? 0.06 : 0, alarm.ctx.currentTime, 0.01);
   }
 
   function render() {
@@ -356,6 +400,8 @@
     });
 
     $('level').addEventListener('change', e => { setLevel(e.target.checked); updateAlpha(); });
+    $('alarm').addEventListener('change', e => { state.alarm = e.target.checked; updateAlarm(); });
+    document.addEventListener('visibilitychange', updateAlarm);
 
     document.querySelectorAll('[data-show]').forEach(box => {
       box.checked = state.show[box.dataset.show];
