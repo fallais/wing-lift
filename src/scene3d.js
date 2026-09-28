@@ -7,16 +7,27 @@ import { PRESSURE_GLSL, pressureUniforms } from './pressure.js';
 // The colours below are hand-picked display values: skip three's sRGB/linear conversions.
 THREE.ColorManagement.enabled = false;
 
-const X0 = -7, X1 = 9, Y0 = -4.5, Y1 = 4.5, HALF = 4;
+const X0 = -7,
+  X1 = 9,
+  Y0 = -4.5,
+  Y1 = 4.5,
+  HALF = 4;
 const TARGET = new THREE.Vector3(1.2, 0.1, 0);
 const DEFAULT_CAM = { th: -0.4, ph: 0.22, r: 16 };
 
 const SPEED_COLORS = SPEED_HEX.map(c => new THREE.Color(c));
-const WING_RGB = [0.8, 0.84, 0.9], LOW_RGB = [0.23, 0.51, 0.96], HIGH_RGB = [0.94, 0.27, 0.27];
+const WING_RGB = [0.8, 0.84, 0.9],
+  LOW_RGB = [0.23, 0.51, 0.96],
+  HIGH_RGB = [0.94, 0.27, 0.27];
 
 const FORCE_SCALE = 2.2;
 
 // Throws when WebGL is unavailable: the caller then sticks to the 2D view.
+/**
+ * @param {HTMLElement} stage
+ * @param {import('./view.js').ViewInput} input
+ * @returns {import('./view.js').View}
+ */
 export function create(stage, { onTilt }) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -36,8 +47,16 @@ export function create(stage, { onTilt }) {
   scene.add(sun);
 
   const tmp = { u: 0, v: 0, inside: false };
-  let af, flow, aero, show = {};
-  let w = 0, h = 0;
+  /** @type {import('./aero.js').Airfoil} */
+  let af;
+  /** @type {import('./aero.js').Flow} */
+  let flow;
+  /** @type {import('./aero.js').Coefficients} */
+  let aero;
+  /** @type {import('./view.js').Show} */
+  let show = { particles: false, streamlines: false, pressure: false, forces: false };
+  let w = 0,
+    h = 0;
 
   const wingToWorld = p => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
   const sampleVelocity = (x, y) => Aero.velocityClamped(af, flow, x, y, tmp);
@@ -51,16 +70,27 @@ export function create(stage, { onTilt }) {
   const capMat = new THREE.MeshStandardMaterial({ color: 0x8391a7, roughness: 0.6, side: THREE.DoubleSide });
 
   function buildWing() {
-    wing.children.forEach(m => m.geometry.dispose());
+    wing.children.forEach(m => /** @type {THREE.Mesh} */ (m).geometry.dispose());
     wing.clear();
-    const pts = af.pts, n = pts.length;
-    const pos = [], nor = [], col = [], idx = [];
+    const pts = af.pts,
+      n = pts.length;
+    const pos = [],
+      nor = [],
+      col = [],
+      idx = [];
     for (let i = 0; i < n; i++) {
-      const a = pts[(i + n - 2) % (n - 1)], b = pts[(i + 1) % (n - 1)];
-      const tx = b.x - a.x, ty = b.y - a.y, tl = Math.hypot(tx, ty) || 1;
-      let nx = ty / tl, ny = -tx / tl;
+      const a = pts[(i + n - 2) % (n - 1)],
+        b = pts[(i + 1) % (n - 1)];
+      const tx = b.x - a.x,
+        ty = b.y - a.y,
+        tl = Math.hypot(tx, ty) || 1;
+      let nx = ty / tl,
+        ny = -tx / tl;
       const rgb = surfaceColor(pts[i], nx, ny);
-      if (rgb.flip) { nx = -nx; ny = -ny; }
+      if (rgb.flip) {
+        nx = -nx;
+        ny = -ny;
+      }
       for (const z of [-HALF, HALF]) {
         pos.push(pts[i].x, pts[i].y, z);
         nor.push(nx, ny, 0);
@@ -99,7 +129,8 @@ export function create(stage, { onTilt }) {
     }
     if (!show.pressure || tmp.inside) return { flip, c: WING_RGB };
     const cp = 1 - (tmp.u * tmp.u + tmp.v * tmp.v);
-    const a = Math.min(1, cp < 0 ? -cp / 1.5 : cp), c = cp < 0 ? LOW_RGB : HIGH_RGB;
+    const a = Math.min(1, cp < 0 ? -cp / 1.5 : cp),
+      c = cp < 0 ? LOW_RGB : HIGH_RGB;
     return { flip, c: WING_RGB.map((v, k) => v * (1 - a) + c[k] * a) };
   }
 
@@ -112,19 +143,21 @@ export function create(stage, { onTilt }) {
   function buildStreamlines() {
     const seg = [];
     if (show.streamlines) {
-      const step = 0.05, maxSteps = Math.ceil((X1 - X0) / step * 2);
+      const step = 0.05,
+        maxSteps = Math.ceil(((X1 - X0) / step) * 2);
       for (let y0 = Y0 + 0.15; y0 < Y1; y0 += 0.3) {
         const line = [];
-        let x = X0, y = y0;
+        let x = X0,
+          y = y0;
         line.push(x, y);
         for (let n = 0; n < maxSteps; n++) {
           if (!sampleVelocity(x, y)) break;
           let sp = Math.hypot(tmp.u, tmp.v);
           if (sp < 1e-3) break;
-          if (!sampleVelocity(x + tmp.u / sp * step / 2, y + tmp.v / sp * step / 2)) break;
+          if (!sampleVelocity(x + ((tmp.u / sp) * step) / 2, y + ((tmp.v / sp) * step) / 2)) break;
           sp = Math.hypot(tmp.u, tmp.v);
-          x += tmp.u / sp * step;
-          y += tmp.v / sp * step;
+          x += (tmp.u / sp) * step;
+          y += (tmp.v / sp) * step;
           line.push(x, y);
           if (x > X1 || y < Y0 - 1 || y > Y1 + 1) break;
         }
@@ -144,18 +177,21 @@ export function create(stage, { onTilt }) {
   flowParticles.setBounds({ x0: X0, x1: X1, y0: Y0, y1: Y1 }, COUNT);
   // The flow is the same in every section, so each particle keeps its own spanwise station.
   const pz = Float32Array.from({ length: COUNT }, () => -HALF + Math.random() * 2 * HALF);
-  const streakPos = new Float32Array(COUNT * 6), streakCol = new Float32Array(COUNT * 6);
+  const streakPos = new Float32Array(COUNT * 6),
+    streakCol = new Float32Array(COUNT * 6);
   const streakGeo = new THREE.BufferGeometry();
   streakGeo.setAttribute('position', new THREE.BufferAttribute(streakPos, 3).setUsage(THREE.DynamicDrawUsage));
   streakGeo.setAttribute('color', new THREE.BufferAttribute(streakCol, 3).setUsage(THREE.DynamicDrawUsage));
-  const particles = new THREE.LineSegments(streakGeo,
-    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 }));
+  const particles = new THREE.LineSegments(
+    streakGeo,
+    new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 }),
+  );
   particles.frustumCulled = false;
   scene.add(particles);
 
   function drawParticles(frame, speed) {
     const { x, y, u, v, bucket } = frame;
-    const tail = Math.min(speed, 100) / 50 * 0.25;
+    const tail = (Math.min(speed, 100) / 50) * 0.25;
     for (let i = 0; i < COUNT; i++) {
       const o = i * 6;
       // Just respawned: park the streak out of sight until its next step.
@@ -164,10 +200,18 @@ export function create(stage, { onTilt }) {
         continue;
       }
       const c = SPEED_COLORS[bucket[i]];
-      streakPos[o] = x[i] - u[i] * tail; streakPos[o + 1] = y[i] - v[i] * tail; streakPos[o + 2] = pz[i];
-      streakPos[o + 3] = x[i]; streakPos[o + 4] = y[i]; streakPos[o + 5] = pz[i];
-      streakCol[o] = c.r * 0.15; streakCol[o + 1] = c.g * 0.15; streakCol[o + 2] = c.b * 0.2;
-      streakCol[o + 3] = c.r; streakCol[o + 4] = c.g; streakCol[o + 5] = c.b;
+      streakPos[o] = x[i] - u[i] * tail;
+      streakPos[o + 1] = y[i] - v[i] * tail;
+      streakPos[o + 2] = pz[i];
+      streakPos[o + 3] = x[i];
+      streakPos[o + 4] = y[i];
+      streakPos[o + 5] = pz[i];
+      streakCol[o] = c.r * 0.15;
+      streakCol[o + 1] = c.g * 0.15;
+      streakCol[o + 2] = c.b * 0.2;
+      streakCol[o + 3] = c.r;
+      streakCol[o + 4] = c.g;
+      streakCol[o + 5] = c.b;
     }
     streakGeo.attributes.position.needsUpdate = true;
     streakGeo.attributes.color.needsUpdate = true;
@@ -204,7 +248,8 @@ export function create(stage, { onTilt }) {
           float fade = smoothstep(0.0, 2.5, min(edge.x, edge.y));
           gl_FragColor = pressureColor(pressureCoefficient(vWorld), 0.7 * fade);
         }`,
-    }));
+    }),
+  );
   pressureSlice.position.set((X0 + X1) / 2, (Y0 + Y1) / 2, HALF + 0.01);
   scene.add(pressureSlice);
 
@@ -235,24 +280,35 @@ export function create(stage, { onTilt }) {
   makeLabel('drag', '');
   makeLabel('weight', '', true);
 
-  const refMat = new THREE.LineDashedMaterial({ color: 0x94a3b8, dashSize: 0.12, gapSize: 0.12, transparent: true, opacity: 0.7 });
+  const refMat = new THREE.LineDashedMaterial({
+    color: 0x94a3b8,
+    dashSize: 0.12,
+    gapSize: 0.12,
+    transparent: true,
+    opacity: 0.7,
+  });
   const refs = new THREE.LineSegments(new THREE.BufferGeometry(), refMat);
   const arc = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xfbbf24 }));
   scene.add(refs, arc);
 
   function updateAngle(alphaDeg, text) {
-    const te = wingToWorld({ x: af.xTE, y: 0 }), le = wingToWorld(af.le);
-    const dir = { x: flow.ca, y: -flow.sa }, r = 1.3;
+    const te = wingToWorld({ x: af.xTE, y: 0 }),
+      le = wingToWorld(af.le);
+    const dir = { x: flow.ca, y: -flow.sa },
+      r = 1.3;
     refs.geometry.dispose();
     refs.geometry = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(le.x - 0.4, te.y, ZF), new THREE.Vector3(te.x + r * 1.3, te.y, ZF),
-      new THREE.Vector3(te.x, te.y, ZF), new THREE.Vector3(te.x + dir.x * r * 1.3, te.y + dir.y * r * 1.3, ZF),
+      new THREE.Vector3(le.x - 0.4, te.y, ZF),
+      new THREE.Vector3(te.x + r * 1.3, te.y, ZF),
+      new THREE.Vector3(te.x, te.y, ZF),
+      new THREE.Vector3(te.x + dir.x * r * 1.3, te.y + dir.y * r * 1.3, ZF),
     ]);
     refs.computeLineDistances();
 
-    const phi = Math.atan2(dir.y, dir.x), arcPts = [];
+    const phi = Math.atan2(dir.y, dir.x),
+      arcPts = [];
     for (let i = 0; i <= 24; i++) {
-      const t = phi * i / 24;
+      const t = (phi * i) / 24;
       arcPts.push(new THREE.Vector3(te.x + r * Math.cos(t), te.y + r * Math.sin(t), ZF));
     }
     arc.geometry.dispose();
@@ -261,7 +317,8 @@ export function create(stage, { onTilt }) {
 
     const lb = labels.alpha;
     lb.at.set(te.x + r * 1.1 * Math.cos(phi / 2), te.y + r * 1.1 * Math.sin(phi / 2), ZF);
-    lb.dx = 4; lb.dy = 0;
+    lb.dx = 4;
+    lb.dy = 0;
     lb.el.textContent = text;
   }
 
@@ -269,35 +326,49 @@ export function create(stage, { onTilt }) {
     const mat = new THREE.MeshBasicMaterial({ color });
     const shaftGeo = new THREE.CylinderGeometry(0.045, 0.045, 1, 12).translate(0, 0.5, 0);
     const headGeo = new THREE.ConeGeometry(0.13, 1, 16).translate(0, 0.5, 0);
-    const g = new THREE.Group();
-    g.shaft = new THREE.Mesh(shaftGeo, mat);
-    g.head = new THREE.Mesh(headGeo, mat);
-    g.add(g.shaft, g.head);
-    forceGroup.add(g);
-    return g;
+    const group = new THREE.Group();
+    const shaft = new THREE.Mesh(shaftGeo, mat);
+    const head = new THREE.Mesh(headGeo, mat);
+    group.add(shaft, head);
+    forceGroup.add(group);
+    return { group, shaft, head };
   }
 
   const UP = new THREE.Vector3(0, 1, 0);
-  function setArrow(g, from, to) {
-    const d = new THREE.Vector3().subVectors(to, from), len = d.length();
-    g.visible = len > 0.08;
-    if (!g.visible) return;
+  /**
+   * @param {ReturnType<typeof makeArrow>} arrow
+   * @param {THREE.Vector3} from
+   * @param {THREE.Vector3} to
+   */
+  function setArrow({ group, shaft, head }, from, to) {
+    const d = new THREE.Vector3().subVectors(to, from),
+      len = d.length();
+    group.visible = len > 0.08;
+    if (!group.visible) return;
     const hl = Math.min(0.35, len * 0.5);
-    g.position.copy(from);
-    g.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
-    g.shaft.scale.y = len - hl;
-    g.head.position.y = len - hl;
-    g.head.scale.y = hl;
+    group.position.copy(from);
+    group.quaternion.setFromUnitVectors(UP, d.divideScalar(len));
+    shaft.scale.y = len - hl;
+    head.position.y = len - hl;
+    head.scale.y = hl;
   }
 
   const forceGroup = new THREE.Group();
   scene.add(forceGroup);
   const arrows = {
-    weight: makeArrow(0xc084fc), drag: makeArrow(0xf87171), lift: makeArrow(0x4ade80), res: makeArrow(0xfacc15),
+    weight: makeArrow(0xc084fc),
+    drag: makeArrow(0xf87171),
+    lift: makeArrow(0x4ade80),
+    res: makeArrow(0xfacc15),
   };
-  const acDot = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
-  const comps = new THREE.LineSegments(new THREE.BufferGeometry(),
-    new THREE.LineDashedMaterial({ color: 0xfacc15, dashSize: 0.08, gapSize: 0.1, transparent: true, opacity: 0.5 }));
+  const acDot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.09, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xfacc15 }),
+  );
+  const comps = new THREE.LineSegments(
+    new THREE.BufferGeometry(),
+    new THREE.LineDashedMaterial({ color: 0xfacc15, dashSize: 0.08, gapSize: 0.1, transparent: true, opacity: 0.5 }),
+  );
   forceGroup.add(acDot, comps);
 
   // Arrows are proportional to force; `perNewton` converts newtons to lift coefficient units.
@@ -306,7 +377,8 @@ export function create(stage, { onTilt }) {
     const scale = FORCE_SCALE * perNewton;
     const a = wingToWorld(af.ac);
     const ac = new THREE.Vector3(a.x, a.y, ZF);
-    const above = Math.max(f.lift, 0), below = Math.max(f.weight, -f.lift);
+    const above = Math.max(f.lift, 0),
+      below = Math.max(f.weight, -f.lift);
     const fit = Math.min(
       (Y1 - 0.8 - ac.y) / (above * scale || 1),
       (ac.y - Y0 - 0.3) / (below * scale || 1),
@@ -345,7 +417,8 @@ export function create(stage, { onTilt }) {
     camera.position.set(
       TARGET.x + r * Math.sin(cam.th) * Math.cos(cam.ph),
       TARGET.y + r * Math.sin(cam.ph),
-      TARGET.z + r * Math.cos(cam.th) * Math.cos(cam.ph));
+      TARGET.z + r * Math.cos(cam.th) * Math.cos(cam.ph),
+    );
     camera.lookAt(TARGET);
   }
 
@@ -358,23 +431,38 @@ export function create(stage, { onTilt }) {
   });
   stage.addEventListener('pointermove', e => {
     if (!drag) return;
-    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    drag.x = e.clientX; drag.y = e.clientY;
-    if (drag.tilt) { onTilt(drag.y0 - e.clientY); return; }
+    const dx = e.clientX - drag.x,
+      dy = e.clientY - drag.y;
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    if (drag.tilt) {
+      onTilt(drag.y0 - e.clientY);
+      return;
+    }
     cam.th -= dx * 0.006;
     cam.ph = Math.max(-0.2, Math.min(1.3, cam.ph + dy * 0.006));
     placeCamera();
   });
-  const endDrag = () => { drag = null; };
+  const endDrag = () => {
+    drag = null;
+  };
   stage.addEventListener('pointerup', endDrag);
   stage.addEventListener('pointercancel', endDrag);
-  stage.addEventListener('wheel', e => {
+  stage.addEventListener(
+    'wheel',
+    e => {
+      if (!active) return;
+      e.preventDefault();
+      cam.r = Math.max(8, Math.min(40, cam.r * Math.exp(e.deltaY * 0.001)));
+      placeCamera();
+    },
+    { passive: false },
+  );
+  stage.addEventListener('dblclick', () => {
     if (!active) return;
-    e.preventDefault();
-    cam.r = Math.max(8, Math.min(40, cam.r * Math.exp(e.deltaY * 0.001)));
+    Object.assign(cam, DEFAULT_CAM);
     placeCamera();
-  }, { passive: false });
-  stage.addEventListener('dblclick', () => { if (!active) return; Object.assign(cam, DEFAULT_CAM); placeCamera(); });
+  });
 
   const proj = new THREE.Vector3();
   function placeLabels() {
@@ -384,14 +472,17 @@ export function create(stage, { onTilt }) {
       lb.el.style.display = on ? '' : 'none';
       if (!on) continue;
       proj.copy(lb.at).project(camera);
-      lb.el.style.left = `${(proj.x + 1) / 2 * w + lb.dx}px`;
-      lb.el.style.top = `${(1 - proj.y) / 2 * h + lb.dy}px`;
+      lb.el.style.left = `${((proj.x + 1) / 2) * w + lb.dx}px`;
+      lb.el.style.top = `${((1 - proj.y) / 2) * h + lb.dy}px`;
     }
   }
 
   return {
     setFlow(nextAf, nextFlow, nextAero, nextShow) {
-      af = nextAf; flow = nextFlow; aero = nextAero; show = nextShow;
+      af = nextAf;
+      flow = nextFlow;
+      aero = nextAero;
+      show = nextShow;
       flowParticles.setFlow(af, flow, Aero.stallWake(af, flow, aero));
       updatePressureSlice();
       buildWing();
@@ -412,7 +503,8 @@ export function create(stage, { onTilt }) {
       drag = null;
     },
     resize() {
-      w = stage.clientWidth; h = stage.clientHeight;
+      w = stage.clientWidth;
+      h = stage.clientHeight;
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();

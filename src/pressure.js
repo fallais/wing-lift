@@ -106,7 +106,13 @@ export function createPressureLayer(canvas) {
 
   /** @param {string} name */
   const loc = name => gl.getUniformLocation(program, name);
-  const u = { origin: loc('uOrigin'), scale: loc('uScale'), rot: loc('uRot'), circle: loc('uCircle'), gamma: loc('uGamma') };
+  const u = {
+    origin: loc('uOrigin'),
+    scale: loc('uScale'),
+    rot: loc('uRot'),
+    circle: loc('uCircle'),
+    gamma: loc('uGamma'),
+  };
 
   return {
     /**

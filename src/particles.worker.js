@@ -8,7 +8,7 @@ import { SPEED_BUCKETS, layout } from './particle-frame.js';
 /** @typedef {import('./aero.js').Wake} Wake */
 /** @typedef {import('./particle-frame.js').Bounds} Bounds */
 
-/** @type {{ mx: number, my: number, R2: number } | null} */
+/** @type {import('./aero.js').Circle | null} */
 let circle = null;
 /** @type {Flow} */
 let flow;
@@ -17,12 +17,15 @@ let wake = null;
 /** @type {Bounds} */
 let bounds = { x0: 0, x1: 0, y0: 0, y1: 0 };
 let count = 0;
-let x = new Float32Array(0), y = new Float32Array(0), phase = new Float32Array(0), life = new Float32Array(0);
+let x = new Float32Array(0),
+  y = new Float32Array(0),
+  phase = new Float32Array(0),
+  life = new Float32Array(0);
 let spawned = false;
 const tmp = { u: 0, v: 0, inside: false };
 
 /** @param {number} px @param {number} py */
-const sample = (px, py) => velocityClamped(/** @type {any} */ (circle), flow, px, py, tmp);
+const sample = (px, py) => velocityClamped(/** @type {import('./aero.js').Circle} */ (circle), flow, px, py, tmp);
 
 /** @param {number} i @param {boolean} anywhere */
 function spawn(i, anywhere) {
@@ -56,10 +59,11 @@ function step(buffer, dt, time, speed) {
   // Capped so particles stay readable at airliner speeds.
   const speedFactor = Math.min(speed, 100) / 50;
   const k = speedFactor * 1.3 * dt;
-  const { x0, x1, y0, y1 } = bounds;
+  const { x1, y0, y1 } = bounds;
 
   for (let i = 0; i < count; i++) {
-    const px = x[i], py = y[i];
+    const px = x[i],
+      py = y[i];
     life[i] -= dt * speedFactor;
     if (life[i] <= 0 || !sample(px, py)) {
       spawn(i, life[i] <= 0);
@@ -67,7 +71,8 @@ function step(buffer, dt, time, speed) {
       continue;
     }
 
-    let u = tmp.u, v = tmp.v;
+    let u = tmp.u,
+      v = tmp.v;
     if (sample(px + (u * k) / 2, py + (v * k) / 2)) {
       u = tmp.u;
       v = tmp.v;

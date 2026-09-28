@@ -7,6 +7,11 @@ import { createPressureLayer } from './pressure.js';
 const FORCE_SCALE = 1.5;
 const STROKES = SPEED_COLORS.map(c => c + 'c0');
 
+/**
+ * @param {HTMLElement} stage
+ * @param {import('./view.js').ViewInput} input
+ * @returns {import('./view.js').View}
+ */
 export function create(stage, { onTilt, onNudge }) {
   const root = document.createElement('div');
   root.className = 'view';
@@ -23,9 +28,16 @@ export function create(stage, { onTilt, onNudge }) {
   const tmp = { u: 0, v: 0, inside: false };
 
   const view = { w: 0, h: 0, s: 1, cx: 0, cy: 0, x0: 0, x1: 0, y0: 0, y1: 0, dpr: 1 };
-  let af, flow, show = {};
-  let staticDirty = true, active = true;
-  let lastAngle = null, lastForces = null;
+  /** @type {import('./aero.js').Airfoil} */
+  let af;
+  /** @type {import('./aero.js').Flow} */
+  let flow;
+  /** @type {import('./view.js').Show} */
+  let show = { particles: false, streamlines: false, pressure: false, forces: false };
+  let staticDirty = true,
+    active = true;
+  let lastAngle = null,
+    lastForces = null;
 
   const wingToWorld = p => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
   const toScreen = p => ({ x: view.cx + p.x * view.s, y: view.cy - p.y * view.s });
@@ -74,7 +86,8 @@ export function create(stage, { onTilt, onNudge }) {
 
   function drawPressureCpu() {
     const cell = 5;
-    const gw = Math.ceil(view.w / cell), gh = Math.ceil(view.h / cell);
+    const gw = Math.ceil(view.w / cell),
+      gh = Math.ceil(view.h / cell);
     pressureCanvas.width = gw;
     pressureCanvas.height = gh;
     const pctx = pressureCanvas.getContext('2d');
@@ -83,18 +96,22 @@ export function create(stage, { onTilt, onNudge }) {
 
     // Cells inside the wing reuse the last outside value to avoid a dark halo.
     for (let j = 0; j < gh; j++) {
-      const y = view.y1 - (j + 0.5) * cell / view.s;
+      const y = view.y1 - ((j + 0.5) * cell) / view.s;
       let cp = 0;
       for (let i = 0; i < gw; i++) {
-        const x = view.x0 + (i + 0.5) * cell / view.s;
+        const x = view.x0 + ((i + 0.5) * cell) / view.s;
         Aero.velocityWorld(af, flow, x, y, tmp);
         if (!tmp.inside) cp = 1 - (tmp.u * tmp.u + tmp.v * tmp.v);
         const o = (j * gw + i) * 4;
         if (cp < 0) {
-          d[o] = 59; d[o + 1] = 130; d[o + 2] = 246;
+          d[o] = 59;
+          d[o + 1] = 130;
+          d[o + 2] = 246;
           d[o + 3] = 200 * Math.min(1, -cp / 1.5);
         } else {
-          d[o] = 239; d[o + 1] = 68; d[o + 2] = 68;
+          d[o] = 239;
+          d[o + 1] = 68;
+          d[o + 2] = 68;
           d[o + 3] = 200 * Math.min(1, cp);
         }
       }
@@ -106,23 +123,24 @@ export function create(stage, { onTilt, onNudge }) {
 
   function drawStreamlines() {
     const h = 0.05;
-    const maxSteps = Math.ceil((view.x1 - view.x0) / h * 2);
+    const maxSteps = Math.ceil(((view.x1 - view.x0) / h) * 2);
     const ctx = bgCtx;
     ctx.strokeStyle = 'rgba(226,232,240,0.35)';
     ctx.lineWidth = 1;
 
     for (let y0 = view.y0 + 0.15; y0 < view.y1; y0 += 0.3) {
-      let x = view.x0, y = y0;
+      let x = view.x0,
+        y = y0;
       ctx.beginPath();
       ctx.moveTo(sx(x), sy(y));
       for (let n = 0; n < maxSteps; n++) {
         if (!sampleVelocity(x, y)) break;
         let sp = Math.hypot(tmp.u, tmp.v);
         if (sp < 1e-3) break;
-        if (!sampleVelocity(x + tmp.u / sp * h / 2, y + tmp.v / sp * h / 2)) break;
+        if (!sampleVelocity(x + ((tmp.u / sp) * h) / 2, y + ((tmp.v / sp) * h) / 2)) break;
         sp = Math.hypot(tmp.u, tmp.v);
-        x += tmp.u / sp * h;
-        y += tmp.v / sp * h;
+        x += (tmp.u / sp) * h;
+        y += (tmp.v / sp) * h;
         ctx.lineTo(sx(x), sy(y));
         if (x > view.x1 || y < view.y0 - 1 || y > view.y1 + 1) break;
       }
@@ -154,21 +172,32 @@ export function create(stage, { onTilt, onNudge }) {
       <text data-id="weightLabel" class="lbl" text-anchor="end"/>
     </g>`;
   const el = {};
-  svg.querySelectorAll('[data-id]').forEach(n => { el[n.dataset.id] = n; });
+  svg.querySelectorAll('[data-id]').forEach(n => {
+    el[/** @type {SVGElement} */ (n).dataset.id] = n;
+  });
 
-  const attr = (node, values) => { for (const k in values) node.setAttribute(k, values[k]); };
+  const attr = (node, values) => {
+    for (const k in values) node.setAttribute(k, values[k]);
+  };
 
   function setArrow(id, x1, y1, x2, y2) {
     const g = el[id];
-    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+    const dx = x2 - x1,
+      dy = y2 - y1,
+      len = Math.hypot(dx, dy);
     g.style.display = len < 4 ? 'none' : '';
     if (len < 4) return;
-    const ux = dx / len, uy = dy / len;
-    const hl = Math.min(13, len * 0.5), hw = hl * 0.55;
-    const bx = x2 - ux * hl, by = y2 - uy * hl;
+    const ux = dx / len,
+      uy = dy / len;
+    const hl = Math.min(13, len * 0.5),
+      hw = hl * 0.55;
+    const bx = x2 - ux * hl,
+      by = y2 - uy * hl;
     attr(g.querySelector('line'), { x1, y1, x2: bx, y2: by });
-    g.querySelector('path').setAttribute('d',
-      `M${x2} ${y2}L${bx - uy * hw} ${by + ux * hw}L${bx + uy * hw} ${by - ux * hw}Z`);
+    g.querySelector('path').setAttribute(
+      'd',
+      `M${x2} ${y2}L${bx - uy * hw} ${by + ux * hw}L${bx + uy * hw} ${by - ux * hw}Z`,
+    );
   }
 
   function setLabel(id, x, y, text) {
@@ -180,10 +209,15 @@ export function create(stage, { onTilt, onNudge }) {
     lastAngle = [alphaDeg, text];
     if (!view.w || !af) return;
 
-    el.wing.setAttribute('d', af.pts.map((p, i) => {
-      const q = wingToScreen(p);
-      return `${i ? 'L' : 'M'}${q.x.toFixed(1)} ${q.y.toFixed(1)}`;
-    }).join('') + 'Z');
+    el.wing.setAttribute(
+      'd',
+      af.pts
+        .map((p, i) => {
+          const q = wingToScreen(p);
+          return `${i ? 'L' : 'M'}${q.x.toFixed(1)} ${q.y.toFixed(1)}`;
+        })
+        .join('') + 'Z',
+    );
 
     // Angle of attack: horizontal vs chord line, measured at the trailing edge.
     const te = wingToScreen({ x: af.xTE, y: 0 });
@@ -194,8 +228,12 @@ export function create(stage, { onTilt, onNudge }) {
     attr(el.horizon, { x1: le.x - 0.4 * view.s, y1: te.y, x2: te.x + r * 1.3, y2: te.y });
     attr(el.chordLine, { x1: te.x, y1: te.y, x2: te.x + dir.x * r * 1.3, y2: te.y + dir.y * r * 1.3 });
     const phi = Math.atan2(dir.y, dir.x);
-    el.alphaArc.setAttribute('d', Math.abs(alphaDeg) >= 0.5
-      ? `M${te.x + r} ${te.y}A${r} ${r} 0 0 ${phi > 0 ? 1 : 0} ${te.x + r * dir.x} ${te.y + r * dir.y}` : '');
+    el.alphaArc.setAttribute(
+      'd',
+      Math.abs(alphaDeg) >= 0.5
+        ? `M${te.x + r} ${te.y}A${r} ${r} 0 0 ${phi > 0 ? 1 : 0} ${te.x + r * dir.x} ${te.y + r * dir.y}`
+        : '',
+    );
     setLabel('alphaLabel', te.x + r * 1.08 * Math.cos(phi / 2) + 4, te.y + r * 1.08 * Math.sin(phi / 2) + 4, text);
   }
 
@@ -208,11 +246,12 @@ export function create(stage, { onTilt, onNudge }) {
 
     const ac = wingToScreen(af.ac);
     let k = FORCE_SCALE * view.s * perNewton;
-    const above = Math.max(f.lift, 0), below = Math.max(f.weight, -f.lift);
+    const above = Math.max(f.lift, 0),
+      below = Math.max(f.weight, -f.lift);
     const fit = Math.min(
       (ac.y - 120) / (above * k || 1),
       (view.h - ac.y - 150) / (below * k || 1),
-      0.42 * view.w / (f.drag * k || 1),
+      (0.42 * view.w) / (f.drag * k || 1),
     );
     if (fit < 1) k *= Math.max(0, fit);
 
@@ -253,18 +292,26 @@ export function create(stage, { onTilt, onNudge }) {
   stage.addEventListener('pointermove', e => {
     if (drag) onTilt(drag.y - e.clientY);
   });
-  const endDrag = () => { drag = null; };
+  const endDrag = () => {
+    drag = null;
+  };
   stage.addEventListener('pointerup', endDrag);
   stage.addEventListener('pointercancel', endDrag);
-  stage.addEventListener('wheel', e => {
-    if (!active) return;
-    e.preventDefault();
-    onNudge(-Math.sign(e.deltaY));
-  }, { passive: false });
+  stage.addEventListener(
+    'wheel',
+    e => {
+      if (!active) return;
+      e.preventDefault();
+      onNudge(-Math.sign(e.deltaY));
+    },
+    { passive: false },
+  );
 
   return {
     setFlow(nextAf, nextFlow, nextAero, nextShow) {
-      af = nextAf; flow = nextFlow; show = nextShow;
+      af = nextAf;
+      flow = nextFlow;
+      show = nextShow;
       particles.setFlow(af, flow, Aero.stallWake(af, flow, nextAero));
       staticDirty = true;
     },
@@ -282,10 +329,16 @@ export function create(stage, { onTilt, onNudge }) {
       drag = null;
     },
     resize() {
-      const w = stage.clientWidth, h = stage.clientHeight;
+      const w = stage.clientWidth,
+        h = stage.clientHeight;
       // Particles are redrawn every frame: keep that canvas at 1x to spare the GPU.
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      for (const [ctx, scale] of [[bgCtx, dpr], [fxCtx, 1]]) {
+      /** @type {[CanvasRenderingContext2D, number][]} */
+      const layers = [
+        [bgCtx, dpr],
+        [fxCtx, 1],
+      ];
+      for (const [ctx, scale] of layers) {
         ctx.canvas.width = Math.round(w * scale);
         ctx.canvas.height = Math.round(h * scale);
         ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -294,13 +347,23 @@ export function create(stage, { onTilt, onNudge }) {
       glCanvas.height = Math.round(h * dpr);
       svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
 
-      Object.assign(view, { w, h, dpr, s: Math.min(w / (w < 640 ? 8 : 11.5), h / 7), cx: w * (w < 640 ? 0.55 : 0.45), cy: h * 0.5 });
+      Object.assign(view, {
+        w,
+        h,
+        dpr,
+        s: Math.min(w / (w < 640 ? 8 : 11.5), h / 7),
+        cx: w * (w < 640 ? 0.55 : 0.45),
+        cy: h * 0.5,
+      });
       view.x0 = -view.cx / view.s;
       view.x1 = (w - view.cx) / view.s;
       view.y0 = -(h - view.cy) / view.s;
       view.y1 = view.cy / view.s;
 
-      particles.setBounds({ x0: view.x0, x1: view.x1, y0: view.y0, y1: view.y1 }, Math.round(Math.min(3500, w * h / 900)));
+      particles.setBounds(
+        { x0: view.x0, x1: view.x1, y0: view.y0, y1: view.y1 },
+        Math.round(Math.min(3500, (w * h) / 900)),
+      );
       fxCtx.clearRect(0, 0, w, h);
       staticDirty = true;
       redrawOverlay();

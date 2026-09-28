@@ -17,14 +17,22 @@ The flow is the exact potential flow around a [Joukowski airfoil](https://en.wik
 
 The wing is straight and every section sees the same 2D flow.
 
-Plain JavaScript modules bundled with [Vite](https://vite.dev/). The 2D view uses Canvas and SVG; the 3D view uses [three.js](https://threejs.org/), and the page falls back to 2D without WebGL.
+Plain JavaScript modules with JSDoc types, bundled with [Vite](https://vite.dev/):
+
+- `src/aero.js`: the physics (flow field, lift and drag, atmosphere), covered by `src/aero.test.js`
+- `src/particles.worker.js`: moves the particles in a Web Worker
+- `src/pressure.js`: the pressure field as a GPU shader
+- `src/scene2d.js` / `src/scene3d.js`: the two views, same interface (`src/view.js`); three.js is only loaded for the 3D view
+- `src/main.js`: controls, readouts and the Cz(α) chart
 
 ## Run locally
 
 ```sh
 npm install
 npm run dev      # dev server with live reload
+npm run check    # lint, formatting, types and tests
+npm run format   # apply the formatting
 npm run build    # production build in dist/
 ```
 
-Pushing to `main` builds and deploys to GitHub Pages (`.github/workflows/deploy.yml`).
+Every push and pull request runs the checks; pushing to `main` also deploys to GitHub Pages (`.github/workflows/deploy.yml`).

@@ -25,7 +25,10 @@ const I18N = {
     area: 'Surface S',
     mass: 'Masse',
     aircraft: 'Avion',
-    plGlider: 'Planeur', plCessna: 'Cessna 172', plPc12: 'Pilatus PC-12', plA321: 'Airbus A321',
+    plGlider: 'Planeur',
+    plCessna: 'Cessna 172',
+    plPc12: 'Pilatus PC-12',
+    plA321: 'Airbus A321',
     level: 'Vol en palier (α automatique)',
     showParticles: 'Particules',
     showStreamlines: 'Lignes de courant',
@@ -43,13 +46,18 @@ const I18N = {
     chart: 'Courbe Cz(α)',
     stall: 'Décrochage !',
     tooSlow: 'Trop lent pour voler !',
-    legLow: 'dépression', legHigh: 'surpression',
+    legLow: 'dépression',
+    legHigh: 'surpression',
     hintOrbit: 'Glisser : tourner la vue',
     hintTilt: 'Maj + glisser : incidence',
     hintZoom: 'Molette : zoom · double-clic : recentrer',
     hint2d: 'Glisser verticalement ou molette : incidence',
-    lift: 'Portance', drag: 'Traînée', res: 'Résultante', weight: 'Poids',
-    cl: 'Cz', liftSym: 'P',
+    lift: 'Portance',
+    drag: 'Traînée',
+    res: 'Résultante',
+    weight: 'Poids',
+    cl: 'Cz',
+    liftSym: 'P',
     caption: (z, s) => `Portance nulle à α = ${z}° · décrochage vers ${s}°`,
   },
   en: {
@@ -71,7 +79,10 @@ const I18N = {
     area: 'Wing area S',
     mass: 'Mass',
     aircraft: 'Aircraft',
-    plGlider: 'Glider', plCessna: 'Cessna 172', plPc12: 'Pilatus PC-12', plA321: 'Airbus A321',
+    plGlider: 'Glider',
+    plCessna: 'Cessna 172',
+    plPc12: 'Pilatus PC-12',
+    plA321: 'Airbus A321',
     level: 'Level flight (automatic α)',
     showParticles: 'Particles',
     showStreamlines: 'Streamlines',
@@ -89,13 +100,18 @@ const I18N = {
     chart: 'CL(α) curve',
     stall: 'Stall!',
     tooSlow: 'Too slow to fly!',
-    legLow: 'low pressure', legHigh: 'high pressure',
+    legLow: 'low pressure',
+    legHigh: 'high pressure',
     hintOrbit: 'Drag: rotate the view',
     hintTilt: 'Shift + drag: angle of attack',
     hintZoom: 'Wheel: zoom · double-click: reset',
     hint2d: 'Drag vertically or scroll: angle of attack',
-    lift: 'Lift', drag: 'Drag', res: 'Resultant', weight: 'Weight',
-    cl: 'CL', liftSym: 'L',
+    lift: 'Lift',
+    drag: 'Drag',
+    res: 'Resultant',
+    weight: 'Weight',
+    cl: 'CL',
+    liftSym: 'L',
     caption: (z, s) => `Zero lift at α = ${z}° · stall around ${s}°`,
   },
 };
@@ -109,8 +125,9 @@ const PLANES = {
 };
 
 // Mass slider is logarithmic (100 kg to 100 t) so a glider and an airliner both get usable resolution.
-const MASS_MIN = 100, MASS_MAX = 100000;
-const massToSlider = m => Math.round(1000 * Math.log(m / MASS_MIN) / Math.log(MASS_MAX / MASS_MIN));
+const MASS_MIN = 100,
+  MASS_MAX = 100000;
+const massToSlider = m => Math.round((1000 * Math.log(m / MASS_MIN)) / Math.log(MASS_MAX / MASS_MIN));
 const sliderToMass = v => {
   const m = MASS_MIN * (MASS_MAX / MASS_MIN) ** (v / 1000);
   const step = m < 1000 ? 10 : m < 10000 ? 50 : 500;
@@ -132,15 +149,19 @@ const state = {
   show: { particles: true, streamlines: false, pressure: true, forces: true },
 };
 
+// DOM lookups. The ids come from index.html, so their elements are left untyped.
+/** @param {string} id @returns {any} */
 const $ = id => document.getElementById(id);
+/** @param {string} selector @returns {HTMLElement[]} */
+const $$ = selector => [...document.querySelectorAll(/** @type {any} */ (selector))];
 const stage = $('stage');
 let af, aero, flow, clMax;
 let time = 0;
 
 const tr = key => I18N[state.lang][key];
 const fmt = (n, d = 0) => n.toLocaleString(state.lang, { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtForce = n => Math.abs(n) >= 1000 ? `${fmt(n / 1000, 2)} kN` : `${fmt(n)} N`;
-const fmtMass = kg => Math.abs(kg) >= 1000 ? `${fmt(kg / 1000, 2)} t` : `${fmt(kg)} kg`;
+const fmtForce = n => (Math.abs(n) >= 1000 ? `${fmt(n / 1000, 2)} kN` : `${fmt(n)} N`);
+const fmtMass = kg => (Math.abs(kg) >= 1000 ? `${fmt(kg / 1000, 2)} t` : `${fmt(kg)} kg`);
 
 function forces() {
   const rho = Aero.airDensity(state.altitude);
@@ -149,7 +170,7 @@ function forces() {
   const drag = q * state.area * aero.CD;
   const weight = state.mass * G;
   // Slowest speed at which the wing can still carry the weight, at its best angle.
-  const vs = clMax > 0 ? Math.sqrt(2 * weight / (rho * state.area * clMax)) : Infinity;
+  const vs = clMax > 0 ? Math.sqrt((2 * weight) / (rho * state.area * clMax)) : Infinity;
   return { rho, q, lift, drag, res: Math.hypot(lift, drag), weight, vs };
 }
 
@@ -158,12 +179,14 @@ function levelAlpha() {
   const f = forces();
   const target = f.q > 0 ? f.weight / (f.q * state.area) : Infinity;
   const ref = Aero.coefficients(af, 0);
-  let lo = Math.max(-20, ref.stallNeg), hi = Math.min(25, ref.stallPos);
+  let lo = Math.max(-20, ref.stallNeg),
+    hi = Math.min(25, ref.stallPos);
   if (target >= Aero.coefficients(af, hi).CL) return hi;
   if (target <= Aero.coefficients(af, lo).CL) return lo;
   for (let i = 0; i < 30; i++) {
     const mid = (lo + hi) / 2;
-    if (Aero.coefficients(af, mid).CL < target) lo = mid; else hi = mid;
+    if (Aero.coefficients(af, mid).CL < target) lo = mid;
+    else hi = mid;
   }
   return Math.round(lo * 100) / 100;
 }
@@ -200,7 +223,7 @@ function stallWarning() {
 
 // A 1 kHz tone chopped at 5 Hz by a square LFO: bip-bip-bip.
 function createAlarm() {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const ctx = new AudioContext();
   const tone = ctx.createOscillator();
   tone.type = 'square';
   tone.frequency.value = 1000;
@@ -221,7 +244,10 @@ function createAlarm() {
 }
 
 function updateAlarm() {
-  if (!state.alarm || !aero) { if (alarm) alarm.volume.gain.setTargetAtTime(0, alarm.ctx.currentTime, 0.01); return; }
+  if (!state.alarm || !aero) {
+    if (alarm) alarm.volume.gain.setTargetAtTime(0, alarm.ctx.currentTime, 0.01);
+    return;
+  }
   // Created on the checkbox click: browsers only allow audio after a user gesture.
   if (!alarm) alarm = createAlarm();
   const on = stallWarning() && !document.hidden;
@@ -236,11 +262,18 @@ function render() {
 
 // ---------- Stage: 2D or 3D view ----------
 
+/** @type {Record<string, Promise<import('./view.js').View | null>>} */
 const scenes = {};
-let scene = null, tiltFrom = 0;
+/** @type {import('./view.js').View | null} */
+let scene = null;
+let tiltFrom = 0;
+/** @type {import('./view.js').ViewInput} */
 const sceneInput = {
   // Drag distance in pixels, upwards positive, counted from the start of the drag.
-  onTilt: (dy, start) => { if (start) tiltFrom = state.alpha; else setAlpha(tiltFrom + dy * 0.12); },
+  onTilt: (dy, start) => {
+    if (start) tiltFrom = state.alpha;
+    else setAlpha(tiltFrom + dy * 0.12);
+  },
   onNudge: sign => setAlpha(state.alpha + sign * 0.5),
 };
 
@@ -261,7 +294,9 @@ async function setMode(mode) {
   // No WebGL, or the 3D code failed to load: stay in 2D.
   if (!next) {
     mode = '2d';
-    document.querySelector('[data-mode="3d"]').disabled = true;
+    $$('[data-mode="3d"]').forEach(b => {
+      /** @type {HTMLButtonElement} */ (b).disabled = true;
+    });
     next = await sceneFor(mode);
   }
   // A later click won while this view was loading.
@@ -274,8 +309,12 @@ async function setMode(mode) {
   scene.setActive(true);
   state.mode = mode;
   stage.dataset.mode = mode;
-  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-  try { localStorage.setItem('view', mode); } catch (e) { /* storage unavailable */ }
+  $$('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  try {
+    localStorage.setItem('view', mode);
+  } catch {
+    /* storage unavailable */
+  }
   if (af) scene.setFlow(af, flow, aero, state.show);
   scene.resize();
   if (af) drawForces();
@@ -297,10 +336,18 @@ function drawForces() {
 // ---------- Panel ----------
 
 function drawChart() {
-  const W = 300, H = 170, L = 30, R = 8, T = 8, B = 20;
-  const A0 = -20, A1 = 25, C0 = -1.6, C1 = 2.4;
-  const X = a => L + (a - A0) / (A1 - A0) * (W - L - R);
-  const Y = c => T + (C1 - c) / (C1 - C0) * (H - T - B);
+  const W = 300,
+    H = 170,
+    L = 30,
+    R = 8,
+    T = 8,
+    B = 20;
+  const A0 = -20,
+    A1 = 25,
+    C0 = -1.6,
+    C1 = 2.4;
+  const X = a => L + ((a - A0) / (A1 - A0)) * (W - L - R);
+  const Y = c => T + ((C1 - c) / (C1 - C0)) * (H - T - B);
 
   let s = '';
   s += `<rect class="zone" x="${X(Math.min(A1, aero.stallPos))}" y="${T}" width="${Math.max(0, X(A1) - X(aero.stallPos))}" height="${H - T - B}"/>`;
@@ -324,7 +371,8 @@ function drawChart() {
   const clReq = f.q > 0 ? f.weight / (f.q * state.area) : Infinity;
   if (clReq <= C1) s += `<line class="req" x1="${L}" x2="${W - R}" y1="${Y(clReq)}" y2="${Y(clReq)}"/>`;
 
-  const cx = X(state.alpha), cy = Y(aero.CL);
+  const cx = X(state.alpha),
+    cy = Y(aero.CL);
   s += `<line class="guide" x1="${cx}" x2="${cx}" y1="${H - B}" y2="${cy}"/>`;
   s += `<circle class="dot" cx="${cx}" cy="${cy}" r="5"/>`;
   $('chart').innerHTML = s;
@@ -391,10 +439,16 @@ function updatePresetUI() {
 
 function applyLanguage() {
   document.documentElement.lang = state.lang;
-  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = tr(el.dataset.i18n); });
-  document.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('active', b.dataset.lang === state.lang));
+  $$('[data-i18n]').forEach(el => {
+    el.textContent = tr(el.dataset.i18n);
+  });
+  $$('[data-lang]').forEach(b => b.classList.toggle('active', b.dataset.lang === state.lang));
   document.title = tr('title');
-  try { localStorage.setItem('lang', state.lang); } catch (e) { /* storage unavailable */ }
+  try {
+    localStorage.setItem('lang', state.lang);
+  } catch {
+    /* storage unavailable */
+  }
   render();
 }
 
@@ -406,7 +460,7 @@ function setLevel(on) {
 }
 
 // Speed, density, area and mass change the angle needed for level flight.
-const flightChanged = () => state.level ? updateAlpha() : render();
+const flightChanged = () => (state.level ? updateAlpha() : render());
 
 function setAlpha(value) {
   setLevel(false);
@@ -419,7 +473,10 @@ function bindControls() {
   const ranges = {
     thickness: updateShape,
     camber: updateShape,
-    alpha: () => { setLevel(false); updateAlpha(); },
+    alpha: () => {
+      setLevel(false);
+      updateAlpha();
+    },
     speed: flightChanged,
     altitude: flightChanged,
     area: flightChanged,
@@ -429,28 +486,37 @@ function bindControls() {
     const input = $(key);
     const toState = key === 'mass' ? sliderToMass : Number;
     input.value = key === 'mass' ? massToSlider(state.mass) : state[key];
-    input.addEventListener('input', () => { state[key] = toState(input.value); onChange(); });
+    input.addEventListener('input', () => {
+      state[key] = toState(input.value);
+      onChange();
+    });
   }
 
-  $('preset').addEventListener('change', e => {
-    Object.assign(state, Aero.PRESETS[e.target.value]);
+  $('preset').addEventListener('change', () => {
+    Object.assign(state, Aero.PRESETS[$('preset').value]);
     $('thickness').value = state.thickness;
     $('camber').value = state.camber;
     updateShape();
   });
 
-  $('plane').addEventListener('change', e => {
-    Object.assign(state, PLANES[e.target.value]);
+  $('plane').addEventListener('change', () => {
+    Object.assign(state, PLANES[$('plane').value]);
     $('mass').value = massToSlider(state.mass);
     $('area').value = state.area;
     flightChanged();
   });
 
-  $('level').addEventListener('change', e => { setLevel(e.target.checked); updateAlpha(); });
-  $('alarm').addEventListener('change', e => { state.alarm = e.target.checked; updateAlarm(); });
+  $('level').addEventListener('change', () => {
+    setLevel($('level').checked);
+    updateAlpha();
+  });
+  $('alarm').addEventListener('change', () => {
+    state.alarm = $('alarm').checked;
+    updateAlarm();
+  });
   document.addEventListener('visibilitychange', updateAlarm);
 
-  document.querySelectorAll('[data-show]').forEach(box => {
+  /** @type {HTMLInputElement[]} */ ($$('[data-show]')).forEach(box => {
     box.checked = state.show[box.dataset.show];
     box.addEventListener('change', () => {
       state.show[box.dataset.show] = box.checked;
@@ -458,26 +524,32 @@ function bindControls() {
       scene?.setShow(state.show);
     });
   });
-  document.querySelectorAll('[data-mode]').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+  $$('[data-mode]').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
   // The legend holds the display toggles: clicking it must not tilt the wing or turn the camera.
   $('legend').addEventListener('pointerdown', e => e.stopPropagation());
   $('pressureKey').hidden = !state.show.pressure;
 
-  document.querySelectorAll('[data-lang]').forEach(btn => btn.addEventListener('click', () => {
-    state.lang = btn.dataset.lang;
-    applyLanguage();
-  }));
+  $$('[data-lang]').forEach(btn =>
+    btn.addEventListener('click', () => {
+      state.lang = btn.dataset.lang;
+      applyLanguage();
+    }),
+  );
 
   $('helpBtn').addEventListener('click', () => $('help').showModal());
-  $('help').addEventListener('click', e => { if (e.target === $('help')) $('help').close(); });
-
+  $('help').addEventListener('click', e => {
+    if (e.target === $('help')) $('help').close();
+  });
 }
 
 const FRAME_MS = 1000 / 30;
 let last = performance.now();
 let visible = true;
 function frame(now) {
-  if (now - last < FRAME_MS - 2) { requestAnimationFrame(frame); return; }
+  if (now - last < FRAME_MS - 2) {
+    requestAnimationFrame(frame);
+    return;
+  }
   const dt = Math.min(0.08, (now - last) / 1000);
   last = now;
   time += dt;
@@ -489,12 +561,16 @@ let savedMode = '3d';
 try {
   state.lang = localStorage.getItem('lang') || (navigator.language.startsWith('fr') ? 'fr' : 'en');
   if (localStorage.getItem('view') === '2d') savedMode = '2d';
-} catch (e) { /* default */ }
+} catch {
+  /* default */
+}
 
 bindControls();
 setMode(savedMode);
 updateShape();
 applyLanguage();
 new ResizeObserver(() => scene?.resize()).observe(stage);
-new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }).observe(stage);
+new IntersectionObserver(([entry]) => {
+  visible = entry.isIntersecting;
+}).observe(stage);
 requestAnimationFrame(frame);
