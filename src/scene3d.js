@@ -256,7 +256,8 @@ export function create(stage, { onTilt }) {
         }`,
     }),
   );
-  pressureSlice.position.set((X0 + X1) / 2, (Y0 + Y1) / 2, HALF + 0.01);
+  // Just behind the end cap: the wing itself hides the slice along its exact outline.
+  pressureSlice.position.set((X0 + X1) / 2, (Y0 + Y1) / 2, HALF - 0.01);
   scene.add(pressureSlice);
 
   function updatePressureSlice() {

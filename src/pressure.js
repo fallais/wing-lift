@@ -53,7 +53,8 @@ export const PRESSURE_GLSL = /* glsl */ `
       vec2 v = vec2(ca, sa) + gamma / (6.2831853 * dot(d, d)) * vec2(d.y, -d.x);
       return 1.0 - dot(v, v);
     }
-    if (s.w > 0.5) return 1e9;
+    // Only fully inside cells are cut out: the colour then runs under the wing outline, with no gap.
+    if (s.w > 0.999) return 1e9;
     return 1.0 - (ca * ca * s.x + 2.0 * ca * sa * s.y + sa * sa * s.z);
   }
 
