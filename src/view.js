@@ -4,7 +4,7 @@
 /** @typedef {import('./aero.js').Flow} Flow */
 /** @typedef {import('./aero.js').Coefficients} Coefficients */
 
-/** @typedef {{ particles: boolean, streamlines: boolean, pressure: boolean, forces: boolean }} Show */
+/** @typedef {{ particles: boolean, streamlines: boolean, pressure: boolean, forces: boolean, vortices: boolean }} Show vortices: 3D only */
 /** @typedef {{ lift: number, drag: number, res: number, weight: number }} Forces in newtons */
 /** @typedef {{ lift: string, drag: string, res: string, weight: string }} ForceTexts */
 
@@ -16,7 +16,7 @@
 
 /**
  * @typedef {object} View
- * @property {(af: Airfoil, flow: Flow, aero: Coefficients, show: Show) => void} setFlow
+ * @property {(af: Airfoil, flow: Flow, aero: Coefficients, show: Show, ar: number) => void} setFlow `aero` is for the whole wing of aspect ratio `ar`; the 2D view shows the section and ignores `ar`
  * @property {(show: Show) => void} setShow
  * @property {(alphaDeg: number, text: string) => void} updateAngle
  * @property {(f: Forces, perNewton: number, texts: ForceTexts) => void} updateForces arrows in lift coefficient units: newtons × perNewton

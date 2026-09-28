@@ -36,6 +36,7 @@ const I18N = {
     showStreamlines: 'Lignes de courant',
     showPressure: 'Pression',
     showForces: 'Forces',
+    showVortices: 'Tourbillons marginaux',
     stallAlarm: 'Alarme de décrochage',
     results: 'Résultats',
     rCd: 'Cx (traînée)',
@@ -43,6 +44,9 @@ const I18N = {
     hLd: 'Finesse',
     rQ: 'Pression dynamique q',
     rDrag: 'Traînée',
+    rInduced: 'dont traînée induite',
+    rSpan: 'Envergure b = √(A · S)',
+    ar: 'Allongement A',
     rRes: 'Résultante',
     rMass: 'Masse soutenue',
     chart: 'Courbe Cz(α)',
@@ -55,6 +59,7 @@ const I18N = {
     hintOrbit: 'Glisser : tourner la vue',
     hintTilt: 'Maj + glisser : incidence',
     hintZoom: 'Molette : zoom · double-clic : recentrer',
+    hintScale: "Envergure raccourcie à l'écran",
     hint2d: 'Glisser verticalement ou molette : incidence',
     lift: 'Portance',
     drag: 'Traînée',
@@ -62,7 +67,7 @@ const I18N = {
     weight: 'Poids',
     cl: 'Cz',
     liftSym: 'P',
-    caption: (z, s) => `Portance nulle à α = ${z}° · décrochage vers ${s}°`,
+    caption: (z, s) => `Portance nulle à α = ${z}° · décrochage vers ${s}° · pointillés : profil seul (aile infinie)`,
   },
   en: {
     title: 'Wing lift',
@@ -93,6 +98,7 @@ const I18N = {
     showStreamlines: 'Streamlines',
     showPressure: 'Pressure',
     showForces: 'Forces',
+    showVortices: 'Tip vortices',
     stallAlarm: 'Stall warning',
     results: 'Results',
     rCd: 'CD (drag)',
@@ -100,6 +106,9 @@ const I18N = {
     hLd: 'L/D',
     rQ: 'Dynamic pressure q',
     rDrag: 'Drag',
+    rInduced: 'of which induced drag',
+    rSpan: 'Wingspan b = √(A · S)',
+    ar: 'Aspect ratio A',
     rRes: 'Resultant',
     rMass: 'Supported mass',
     chart: 'CL(α) curve',
@@ -112,6 +121,7 @@ const I18N = {
     hintOrbit: 'Drag: rotate the view',
     hintTilt: 'Shift + drag: angle of attack',
     hintZoom: 'Wheel: zoom · double-click: reset',
+    hintScale: 'Span shortened on screen',
     hint2d: 'Drag vertically or scroll: angle of attack',
     lift: 'Lift',
     drag: 'Drag',
@@ -119,16 +129,17 @@ const I18N = {
     weight: 'Weight',
     cl: 'CL',
     liftSym: 'L',
-    caption: (z, s) => `Zero lift at α = ${z}° · stall around ${s}°`,
+    caption: (z, s) => `Zero lift at α = ${z}° · stall around ${s}° · dashed: airfoil alone (infinite wing)`,
   },
 };
 
 // Rounded to the slider steps.
+// Aspect ratio = span² / area: a long, slender glider wing versus stubbier light aircraft and airliners.
 const PLANES = {
-  glider: { mass: 600, area: 18 },
-  cessna: { mass: 1100, area: 16 },
-  pc12: { mass: 4750, area: 26 },
-  a321: { mass: 93500, area: 122.5 },
+  glider: { mass: 600, area: 18, ar: 16 },
+  cessna: { mass: 1100, area: 16, ar: 7.4 },
+  pc12: { mass: 4750, area: 26, ar: 10.3 },
+  a321: { mass: 93500, area: 122.5, ar: 9.5 },
 };
 
 // Mass slider is logarithmic (100 kg to 100 t) so a glider and an airliner both get usable resolution.
@@ -152,9 +163,10 @@ const state = {
   altitude: 1500,
   area: 16,
   mass: 1100,
+  ar: 7.4,
   level: false,
   alarm: false,
-  show: { particles: true, streamlines: false, pressure: true, forces: true },
+  show: { particles: true, streamlines: false, pressure: true, forces: true, vortices: false },
 };
 const DEFAULTS = structuredClone(state);
 const DEFAULT_VIEW = '3d';
@@ -173,29 +185,34 @@ const fmt = (n, d = 0) => n.toLocaleString(state.lang, { minimumFractionDigits: 
 const fmtForce = n => (Math.abs(n) >= 1000 ? `${fmt(n / 1000, 2)} kN` : `${fmt(n)} N`);
 const fmtMass = kg => (Math.abs(kg) >= 1000 ? `${fmt(kg / 1000, 2)} t` : `${fmt(kg)} kg`);
 
+/** Coefficients of the whole wing (lifting line), at a geometric angle of attack. */
+const wing = (/** @type {number} */ alpha) => Aero.coefficients(af, alpha, state.ar);
+
 function forces() {
   const rho = Aero.airDensity(state.altitude);
   const q = 0.5 * rho * state.speed ** 2;
   const lift = q * state.area * aero.CL;
   const drag = q * state.area * aero.CD;
+  const induced = q * state.area * aero.CDi;
+  const span = Math.sqrt(state.ar * state.area);
   const weight = state.mass * G;
   // Slowest speed at which the wing can still carry the weight, at its best angle.
   const vs = clMax > 0 ? Math.sqrt((2 * weight) / (rho * state.area * clMax)) : Infinity;
-  return { rho, q, lift, drag, res: Math.hypot(lift, drag), weight, vs };
+  return { rho, q, lift, drag, induced, span, res: Math.hypot(lift, drag), weight, vs };
 }
 
 // Angle where lift equals weight, searched on the unstalled part of the curve.
 function levelAlpha() {
   const f = forces();
   const target = f.q > 0 ? f.weight / (f.q * state.area) : Infinity;
-  const ref = Aero.coefficients(af, 0);
+  const ref = wing(0);
   let lo = Math.max(-20, ref.stallNeg),
     hi = Math.min(25, ref.stallPos);
-  if (target >= Aero.coefficients(af, hi).CL) return hi;
-  if (target <= Aero.coefficients(af, lo).CL) return lo;
+  if (target >= wing(hi).CL) return hi;
+  if (target <= wing(lo).CL) return lo;
   for (let i = 0; i < 30; i++) {
     const mid = (lo + hi) / 2;
-    if (Aero.coefficients(af, mid).CL < target) lo = mid;
+    if (wing(mid).CL < target) lo = mid;
     else hi = mid;
   }
   return Math.round(lo * 100) / 100;
@@ -206,10 +223,16 @@ function levelAlpha() {
 // The shape and its flow are computed in a worker (~0.1 s); the old one stays on screen meanwhile.
 const solver = createSolver(result => {
   af = result;
-  clMax = Aero.coefficients(af, Aero.coefficients(af, 0).stallPos).CL;
-  updateAlpha();
+  wingChanged();
   syncLoading();
 });
+
+// Maximum lift and every coefficient depend on the aspect ratio as well as on the airfoil.
+function wingChanged() {
+  if (!af) return;
+  clMax = wing(wing(0).stallPos).CL;
+  updateAlpha();
+}
 
 function updateShape() {
   solver.solve({ thickness: state.thickness, camber: state.camber, flap: state.flap });
@@ -221,9 +244,9 @@ function updateAlpha() {
     state.alpha = levelAlpha();
     $('alpha').value = state.alpha;
   }
-  aero = Aero.coefficients(af, state.alpha);
+  aero = wing(state.alpha);
   flow = Aero.flowFor(state.alpha);
-  scene?.setFlow(af, flow, aero, state.show);
+  scene?.setFlow(af, flow, aero, state.show, state.ar);
   updateAlarm();
   render();
 }
@@ -367,7 +390,7 @@ async function setMode(mode) {
   } catch {
     /* storage unavailable */
   }
-  if (af) scene.setFlow(af, flow, aero, state.show);
+  if (af) scene.setFlow(af, flow, aero, state.show, state.ar);
   scene.resize();
   if (af) drawForces();
   modeLoading = false;
@@ -417,8 +440,15 @@ function drawChart() {
     s += `<text x="${L - 5}" y="${Y(c) + 3}" text-anchor="end">${c}</text>`;
   }
 
-  const pts = [];
-  for (let a = A0; a <= A1; a += 0.5) pts.push(`${X(a).toFixed(1)},${Y(Aero.coefficients(af, a).CL).toFixed(1)}`);
+  // Dashed: the airfoil section (infinite wing). Solid: this wing, which lifts less per degree.
+  const pts = [],
+    sectionPts = [];
+  for (let a = A0; a <= A1; a += 0.5) {
+    const cl = Math.max(C0, Math.min(C1, Aero.sectionCoefficients(af, a).CL));
+    sectionPts.push(`${X(a).toFixed(1)},${Y(cl).toFixed(1)}`);
+    pts.push(`${X(a).toFixed(1)},${Y(wing(a).CL).toFixed(1)}`);
+  }
+  s += `<polyline class="section-curve" points="${sectionPts.join(' ')}"/>`;
   s += `<polyline class="curve" points="${pts.join(' ')}"/>`;
   s += `<text x="${L + 4}" y="${T + 10}">${tr('cl')}</text><text x="${W - R - 2}" y="${Y(0) - 4}" text-anchor="end">α</text>`;
 
@@ -445,6 +475,7 @@ function updateReadouts() {
   $('outSpeed').textContent = `${fmt(state.speed)} m/s · ${fmt(state.speed * 3.6)} km/h`;
   $('outAltitude').textContent = `${fmt(state.altitude)} m`;
   $('outArea').textContent = `${fmt(state.area, 1)} m²`;
+  $('outAr').textContent = fmt(state.ar, 1);
   $('outMass').textContent = fmtMass(state.mass);
 
   const hasVs = Number.isFinite(f.vs);
@@ -458,6 +489,8 @@ function updateReadouts() {
   $('rRho').textContent = `${fmt(f.rho, 3)} kg/m³`;
   $('rQ').textContent = `${fmt(f.q)} Pa`;
   $('rDrag').textContent = fmtForce(f.drag);
+  $('rInduced').textContent = fmtForce(f.induced);
+  $('rSpan').textContent = `${fmt(f.span, 1)} m`;
   $('rRes').textContent = fmtForce(f.res);
   $('rMass').textContent = fmtMass(f.lift / G);
 
@@ -489,7 +522,7 @@ function updatePresetUI() {
 
   let plane = 'custom';
   for (const [name, p] of Object.entries(PLANES)) {
-    if (p.mass === state.mass && p.area === state.area) plane = name;
+    if (p.mass === state.mass && p.area === state.area && p.ar === state.ar) plane = name;
   }
   $('plane').value = plane;
 }
@@ -539,6 +572,7 @@ function bindControls() {
     altitude: flightChanged,
     area: flightChanged,
     mass: flightChanged,
+    ar: wingChanged,
   };
   for (const [key, onChange] of Object.entries(ranges)) {
     const input = $(key);
@@ -561,7 +595,8 @@ function bindControls() {
     Object.assign(state, PLANES[$('plane').value]);
     $('mass').value = massToSlider(state.mass);
     $('area').value = state.area;
-    flightChanged();
+    $('ar').value = state.ar;
+    wingChanged();
   });
 
   $('level').addEventListener('change', () => {

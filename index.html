@@ -73,6 +73,9 @@
           <label class="legend-row">
             <input type="checkbox" data-show="forces" /><span data-i18n="showForces">Forces</span>
           </label>
+          <label class="legend-row" data-for="3d">
+            <input type="checkbox" data-show="vortices" /><span data-i18n="showVortices">Tourbillons marginaux</span>
+          </label>
           <label class="legend-row">
             <input type="checkbox" id="alarm" /><span data-i18n="stallAlarm">Alarme de décrochage</span>
           </label>
@@ -82,6 +85,7 @@
             <span data-for="3d" data-i18n="hintOrbit">Glisser : tourner la vue</span>
             <span data-for="3d" data-i18n="hintTilt">Maj + glisser : incidence</span>
             <span data-for="3d" data-i18n="hintZoom">Molette : zoom · double-clic : recentrer</span>
+            <span data-for="3d" data-i18n="hintScale">Envergure raccourcie à l'écran</span>
             <span data-for="2d" data-i18n="hint2d">Glisser verticalement ou molette : incidence</span>
           </div>
           <div class="pressure-key" id="pressureKey">
@@ -148,6 +152,10 @@
               <input type="range" id="area" min="1" max="130" step="0.5" />
             </div>
             <div class="field">
+              <div class="row"><label for="ar" data-i18n="ar">Allongement</label><output id="outAr"></output></div>
+              <input type="range" id="ar" min="4" max="30" step="0.1" />
+            </div>
+            <div class="field">
               <div class="row"><label for="mass" data-i18n="mass">Masse</label><output id="outMass"></output></div>
               <input type="range" id="mass" min="0" max="1000" step="1" />
             </div>
@@ -184,6 +192,10 @@
             <dd id="rQ"></dd>
             <dt data-i18n="rDrag">Traînée</dt>
             <dd id="rDrag" class="c-drag"></dd>
+            <dt data-i18n="rInduced">dont traînée induite</dt>
+            <dd id="rInduced"></dd>
+            <dt data-i18n="rSpan">Envergure</dt>
+            <dd id="rSpan"></dd>
             <dt data-i18n="rRes">Résultante</dt>
             <dd id="rRes" class="c-res"></dd>
             <dt data-i18n="rMass">Masse soutenue</dt>
@@ -219,6 +231,24 @@
           </dd>
           <dt>Surface alaire (S)</dt>
           <dd>Surface de l'aile vue de dessus (m²). Environ 16 m² pour un Cessna 172, 845 m² pour un A380.</dd>
+          <dt>Allongement (A) et envergure (b)</dt>
+          <dd>
+            A = b² / S : une aile longue et fine a un grand allongement (planeur : 16 à 30), une aile courte un petit
+            (Cessna 172 : 7,4). L'envergure b = √(A · S) va d'un bout d'aile à l'autre. En 3D, l'aile est dessinée plus
+            courte qu'en vrai pour garder l'écoulement lisible.
+          </dd>
+          <dt>Tourbillons marginaux</dt>
+          <dd>
+            Sous l'aile, la pression est plus forte : l'air contourne le bout d'aile vers le haut et s'enroule en un
+            tourbillon qui part vers l'arrière. Ces tourbillons poussent l'air vers le bas derrière l'aile (déflexion),
+            ce qui réduit l'incidence réellement vue par l'aile.
+          </dd>
+          <dt>Traînée induite</dt>
+          <dd>
+            Le prix de la portance d'une aile de longueur finie : C<sub>x,i</sub> = C<sub>z</sub>² / (π · e · A). Elle
+            domine à basse vitesse (grand C<sub>z</sub>) et diminue avec l'allongement : c'est pourquoi les planeurs ont
+            de si longues ailes.
+          </dd>
           <dt>Pression dynamique (q)</dt>
           <dd>
             q = ½ · ρ · V², en pascals. C'est « l'énergie » du vent par unité de volume, la même pour tous les profils.
@@ -296,10 +326,11 @@
         <h3>Le modèle</h3>
         <p class="muted">
           Écoulement potentiel exact autour du profil (profils de Joukowski, volets compris), calculé par une méthode
-          des panneaux tourbillonnaires avec condition de Kutta (l'air quitte proprement le bord de fuite). Le
-          décrochage et la traînée viennent d'un modèle empirique simplifié (allongement supposé de 8) ; l'effet des
-          volets y est réduit au-delà de 15°, où l'air décolle en partie du volet. C'est un outil pédagogique, pas un
-          outil de conception.
+          des panneaux tourbillonnaires avec condition de Kutta (l'air quitte proprement le bord de fuite). L'aile
+          entière suit la théorie de la ligne portante de Prandtl (répartition elliptique, e = 0,85) : incidence
+          induite, traînée induite et tourbillons marginaux. Le décrochage et la traînée de profil viennent d'un modèle
+          empirique simplifié ; l'effet des volets y est réduit au-delà de 15°, où l'air décolle en partie du volet.
+          C'est un outil pédagogique, pas un outil de conception.
         </p>
       </div>
 
@@ -321,6 +352,24 @@
           </dd>
           <dt>Wing area (S)</dt>
           <dd>Area of the wing seen from above (m²). About 16 m² for a Cessna 172, 845 m² for an A380.</dd>
+          <dt>Aspect ratio (A) and wingspan (b)</dt>
+          <dd>
+            A = b² / S: a long, slender wing has a high aspect ratio (gliders: 16 to 30), a short one a low one (Cessna
+            172: 7.4). The span b = √(A · S) runs from tip to tip. In 3D the wing is drawn shorter than it really is, to
+            keep the flow readable.
+          </dd>
+          <dt>Tip vortices</dt>
+          <dd>
+            The pressure is higher under the wing, so the air slips round the tip towards the top and rolls up into a
+            vortex trailing behind. These vortices push the air down behind the wing (downwash), which lowers the angle
+            of attack the wing really sees.
+          </dd>
+          <dt>Induced drag</dt>
+          <dd>
+            The price of lift for a wing of finite length: C<sub>D,i</sub> = C<sub>L</sub>² / (π · e · A). It dominates
+            at low speed (high C<sub>L</sub>) and shrinks with the aspect ratio: that is why gliders have such long
+            wings.
+          </dd>
           <dt>Dynamic pressure (q)</dt>
           <dd>q = ½ · ρ · V², in pascals. The wind's "energy" per unit volume, the same for every airfoil.</dd>
           <dt>Lift coefficient (C<sub>L</sub>)</dt>
@@ -389,9 +438,10 @@
         <h3>The model</h3>
         <p class="muted">
           Exact potential flow around the airfoil (Joukowski shapes, flaps included), computed with a vortex panel
-          method and the Kutta condition (air leaves the trailing edge smoothly). Stall and drag come from a simplified
-          empirical model (aspect ratio assumed to be 8); the flap's effect is reduced beyond 15°, where the air partly
-          separates from the flap. A teaching tool, not a design tool.
+          method and the Kutta condition (air leaves the trailing edge smoothly). The whole wing follows Prandtl's
+          lifting-line theory (elliptic loading, e = 0.85): induced angle, induced drag and tip vortices. Stall and
+          profile drag come from a simplified empirical model; the flap's effect is reduced beyond 15°, where the air
+          partly separates from the flap. A teaching tool, not a design tool.
         </p>
       </div>
     </dialog>

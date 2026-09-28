@@ -28,27 +28,29 @@ export function createParticles() {
 
   return {
     /**
-     * @param {Bounds} bounds world rectangle the particles live in
+     * @param {Bounds} bounds world box the particles live in
      * @param {number} nextCount
+     * @param {number} [half] half span of the 3D wing; 0 for the 2D section
      */
-    setBounds(bounds, nextCount) {
+    setBounds(bounds, nextCount, half = 0) {
       count = nextCount;
       buffer = new ArrayBuffer(byteSize(count));
       fresh = null;
-      worker.postMessage({ type: 'bounds', bounds, count });
+      worker.postMessage({ type: 'bounds', bounds, count, half });
     },
     /**
      * @param {Airfoil} af
      * @param {Flow} flow
      * @param {Wake | null} wake
+     * @param {import('./aero.js').TipVortices | null} [vortices] tip vortices of the finite wing, none in the section view
      */
-    setFlow(af, flow, wake) {
+    setFlow(af, flow, wake, vortices = null) {
       // The velocity grids only change with the shape; copying them on every angle change would be wasteful.
       if (af.field !== sentField) {
         worker.postMessage({ type: 'field', field: af.field });
         sentField = af.field;
       }
-      worker.postMessage({ type: 'flow', flow, wake });
+      worker.postMessage({ type: 'flow', flow, wake, vortices });
     },
     /**
      * Asks for the next frame; skipped while the previous one is still being computed.

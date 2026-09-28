@@ -392,6 +392,13 @@ input[type='range'] {
   stroke: var(--accent);
   stroke-width: 2;
 }
+.chart .section-curve {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+  opacity: 0.5;
+}
 .chart .req {
   stroke: var(--weight);
   stroke-dasharray: 5 3;
@@ -631,8 +638,8 @@ input[type='range'] {
   color: var(--muted);
   font-size: 11.5px;
 }
-.stage[data-mode='2d'] .hint [data-for='3d'],
-.stage[data-mode='3d'] .hint [data-for='2d'] {
+.stage[data-mode='2d'] [data-for='3d'],
+.stage[data-mode='3d'] [data-for='2d'] {
   display: none;
 }
 .pressure-key {

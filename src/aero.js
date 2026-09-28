@@ -48,6 +48,8 @@
  * @typedef {object} Coefficients
  * @property {number} CL lift coefficient
  * @property {number} CD drag coefficient
+ * @property {number} CDi induced drag coefficient, part of CD
+ * @property {number} alphaInduced induced angle αᵢ, degrees: the section works at α − αᵢ
  * @property {number} stall 0 before the stall, rising to 1 when fully separated
  * @property {number} stallVis how turbulent the wake looks, 0 to 1
  * @property {1 | -1} side sign of the effective angle of attack
@@ -61,7 +63,6 @@
 
 const DEG = Math.PI / 180;
 const VISCOUS_FACTOR = 0.85;
-const ASPECT_RATIO = 8;
 const OSWALD = 0.85;
 const PANELS = 160;
 const FLAP_CHORD = 0.25;
@@ -647,11 +648,11 @@ function surfacePressure(af, flow) {
 // ---------- Coefficients ----------
 
 /**
+ * Airfoil section (infinite wing): lift from the panel solution, then an empirical stall; profile drag.
  * @param {Airfoil} af
  * @param {number} alphaDeg
- * @returns {Coefficients}
  */
-function coefficients(af, alphaDeg) {
+function sectionCoefficients(af, alphaDeg) {
   // Past 15°, the air starts to separate from a real flap: scale its effect down, to 60 % at 40°.
   const flapEfficiency = 1 - 0.4 * Math.min(1, Math.max(0, (af.flap - 15) / 25));
   const zeroLift = af.alpha0Clean + flapEfficiency * (af.alpha0 - af.alpha0Clean);
@@ -677,20 +678,61 @@ function coefficients(af, alphaDeg) {
     CL = side * ((1 - stall) * clMax * (1 - 0.25 * stall) + stall * flatPlate);
   }
 
-  // Profile drag, plus the extra drag of a deflected flap.
+  // Profile drag, plus the extra drag of a deflected flap and of separated flow.
   const cd0 = 0.007 + 0.03 * af.thickness + 0.12 * Math.sin(af.flap * DEG) ** 2;
-  const induced = (CL * CL) / (Math.PI * OSWALD * ASPECT_RATIO);
   const separated = stall * 1.6 * Math.sin(ae * DEG) ** 2;
 
   return {
     CL,
-    CD: cd0 + induced + separated,
+    CDp: cd0 + separated,
     stall,
     stallVis: over > 0 ? Math.min(1, 0.3 + over / 8) : 0,
-    side,
+    /** @type {1 | -1} */ side: /** @type {1 | -1} */ (side),
     zeroLift,
     stallPos: stallPosEff - camberDeg,
     stallNeg: -stallNegEff - camberDeg,
+  };
+}
+
+/**
+ * Whole wing of aspect ratio `ar`, with Prandtl's lifting-line theory: the trailing vortices push the air
+ * down (downwash), so every section works at a lower effective angle α − αᵢ, with αᵢ = CL / (π e A),
+ * and the lift leans back, giving the induced drag CL² / (π e A). An infinite aspect ratio gives the section.
+ * @param {Airfoil} af
+ * @param {number} alphaDeg geometric angle of attack
+ * @param {number} [ar] aspect ratio, span² / area
+ * @returns {Coefficients}
+ */
+function coefficients(af, alphaDeg, ar = Infinity) {
+  // Induced angle per unit of lift coefficient, in degrees.
+  const k = Number.isFinite(ar) ? 1 / (Math.PI * OSWALD * ar) / DEG : 0;
+  // CL = CL_section(α − k·CL): the left side minus the right side grows with CL, so bisection finds it.
+  let lo = -4,
+    hi = 5;
+  for (let i = 0; i < (k ? 50 : 0); i++) {
+    const mid = (lo + hi) / 2;
+    if (mid - sectionCoefficients(af, alphaDeg - k * mid).CL > 0) hi = mid;
+    else lo = mid;
+  }
+  const CLwing = k ? (lo + hi) / 2 : 0;
+  const alphaInduced = k * CLwing;
+  const sec = sectionCoefficients(af, alphaDeg - alphaInduced);
+  const CL = k ? CLwing : sec.CL;
+  const CDi = k ? (CL * CL) / (Math.PI * OSWALD * ar) : 0;
+  // The section stalls at a fixed effective angle; the wing gets there at a higher geometric angle.
+  const atStall = (/** @type {number} */ a) => a + k * sectionCoefficients(af, a).CL;
+
+  return {
+    CL,
+    CD: sec.CDp + CDi,
+    CDi,
+    alphaInduced,
+    stall: sec.stall,
+    stallVis: sec.stallVis,
+    side: sec.side,
+    zeroLift: sec.zeroLift,
+    stallPos: atStall(sec.stallPos),
+    stallNeg: atStall(sec.stallNeg),
   };
 }
 
@@ -701,6 +743,54 @@ function coefficients(af, alphaDeg) {
 function flowFor(alphaDeg) {
   const a = alphaDeg * DEG;
   return { ca: Math.cos(a), sa: Math.sin(a) };
+}
+
+// ---------- Tip vortices (3D view) ----------
+
+/**
+ * Two trailing vortices leaving the wing tips at the quarter chord and running downstream (+x),
+ * in the 3D world frame (z spanwise). `gamma` is the root circulation, positive for positive lift.
+ * @typedef {{ x0: number, y0: number, zTip: number, gamma: number, core: number }} TipVortices
+ */
+
+/**
+ * Root circulation of an elliptically loaded wing: lift = ρ V Γ₀ π b / 4, so with V = 1 and a
+ * rectangular planform (area = b c), Γ₀ = 2 c CL / π.
+ * @param {number} chord
+ * @param {number} CL wing lift coefficient
+ */
+function rootCirculation(chord, CL) {
+  return (2 * chord * CL) / Math.PI;
+}
+
+/**
+ * Velocity induced by the tip vortices (Biot–Savart, semi-infinite lines, with a soft core so it
+ * stays finite on the axis). Inboard they push the air down, outboard they lift it.
+ * @param {TipVortices} tv
+ * @param {number} x
+ * @param {number} y
+ * @param {number} z
+ * @returns {[number, number, number]}
+ */
+function tipVortexVelocity(tv, x, y, z) {
+  let v = 0,
+    w = 0;
+  for (const [zt, g] of [
+    [-tv.zTip, tv.gamma],
+    [tv.zTip, -tv.gamma],
+  ]) {
+    const rx = x - tv.x0,
+      ry = y - tv.y0,
+      rz = z - zt;
+    const h2 = ry * ry + rz * rz;
+    const r = Math.sqrt(rx * rx + h2);
+    // Semi-infinite line from the wing to far downstream: (1 + cos θ) of the infinite line's 2.
+    const k = ((g / (4 * Math.PI)) * (1 + rx / (r || 1))) / (h2 + tv.core * tv.core);
+    // Direction (1, 0, 0) × (0, ry, rz) = (0, −rz, ry).
+    v -= k * rz;
+    w += k * ry;
+  }
+  return [0, v, w];
 }
 
 // ---------- Stall wake (visual only) ----------
@@ -754,14 +844,16 @@ function airDensity(altitude) {
 
 export {
   PRESETS,
-  ASPECT_RATIO,
   MAX_FLAP,
   makeShape,
   makeAirfoil,
   solvePanels,
   panelVelocity,
   coefficients,
+  sectionCoefficients,
   flowFor,
+  rootCirculation,
+  tipVortexVelocity,
   velocityWorld,
   velocityClamped,
   surfacePressure,

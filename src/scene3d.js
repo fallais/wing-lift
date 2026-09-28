@@ -1,20 +1,27 @@
-// 3D view: a straight wing with the same 2D potential flow in every section. World frame: wind along +x, y up, z spanwise.
+// 3D view: the left half of a straight, finite wing, from the aircraft's centreline (z = 0) to the
+// left tip (+z). World frame: wind along +x, y up, z spanwise.
+// Each section sees the 2D panel flow; the tip vortices of the lifting-line model add their swirl
+// and downwash (the right wing's one too, off screen), and the loading falls off towards the tip.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import * as Aero from './aero.js';
 import { createParticles, SPEED_COLORS as SPEED_HEX } from './particles.js';
-import { PRESSURE_GLSL, pressureUniforms } from './pressure.js';
 
 // The colours below are hand-picked display values: skip three's sRGB/linear conversions.
 THREE.ColorManagement.enabled = false;
 
+// Section-plane extent (streamlines, pressure slice), and how far downstream particles travel.
 const X0 = -7,
   X1 = 9,
   Y0 = -4.5,
   Y1 = 4.5,
-  HALF = 4;
-const TARGET = new THREE.Vector3(1.2, 0.1, 0);
-const DEFAULT_CAM = { th: -0.4, ph: 0.22, r: 16 };
+  PARTICLES_X1 = 24;
+// From upstream, to one side and above: the whole span, the near tip and the trails in view.
+const TARGET = new THREE.Vector3(3, 0, 0);
+const DEFAULT_CAM = { th: -0.75, ph: 0.4 };
+// Room left around the tips for particles and vortices, and the tip vortex core radius.
+const TIP_MARGIN = 6,
+  CORE = 0.45;
 
 const SPEED_COLORS = SPEED_HEX.map(c => new THREE.Color(c));
 const WING_RGB = [0.8, 0.84, 0.9],
@@ -55,7 +62,13 @@ export function create(stage, { onTilt }) {
   /** @type {import('./aero.js').Coefficients} */
   let aero;
   /** @type {import('./view.js').Show} */
-  let show = { particles: false, streamlines: false, pressure: false, forces: false };
+  let show = { particles: false, streamlines: false, pressure: false, forces: false, vortices: false };
+  /**
+   * Drawn half span, root to tip, in the chord's units (chord ≈ 4). Not to scale: a real half span is
+   * 2 to 15 chords, which would hide the flow around the section. It grows gently with the aspect ratio
+   * instead: 1.7 chords for a light aircraft, at most 3 for a glider.
+   */
+  let half = 0;
   let w = 0,
     h = 0;
 
@@ -80,6 +93,9 @@ export function create(stage, { onTilt }) {
       col = [],
       idx = [];
     const cp = Aero.surfacePressure(af, flow);
+    // Spanwise rows from root to tip, closer together near the tip where the loading changes fastest.
+    const ROWS = 30;
+    const rows = Array.from({ length: ROWS + 1 }, (_, k) => half * Math.sin((Math.PI * k) / (2 * ROWS)));
     for (let i = 0; i < n; i++) {
       const a = pts[(i + n - 2) % (n - 1)],
         b = pts[(i + 1) % (n - 1)];
@@ -89,15 +105,18 @@ export function create(stage, { onTilt }) {
       // Outward normal of the counter-clockwise outline.
       const nx = ty / tl,
         ny = -tx / tl;
-      const rgb = surfaceColor(cp[i]);
-      for (const z of [-HALF, HALF]) {
+      for (const z of rows) {
         pos.push(pts[i].x, pts[i].y, z);
         nor.push(nx, ny, 0);
-        col.push(...rgb);
+        // Elliptic loading: the pressure difference, and the lift, fade to nothing at the tips.
+        col.push(...surfaceColor(cp[i] * Math.sqrt(Math.max(0, 1 - (z / half) ** 2))));
       }
       if (i < n - 1) {
-        const k = 2 * i;
-        idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+        for (let r = 0; r < ROWS; r++) {
+          const k = i * (ROWS + 1) + r,
+            next = k + ROWS + 1;
+          idx.push(k, next, k + 1, k + 1, next, next + 1);
+        }
       }
     }
     const g = new THREE.BufferGeometry();
@@ -108,7 +127,7 @@ export function create(stage, { onTilt }) {
     wing.add(new THREE.Mesh(g, wingMat));
 
     const shape = new THREE.Shape(pts.slice(0, -1).map(p => new THREE.Vector2(p.x, p.y)));
-    for (const z of [-HALF, HALF]) {
+    for (const z of [0, half]) {
       const cap = new THREE.Mesh(new THREE.ShapeGeometry(shape), capMat);
       cap.position.z = z;
       wing.add(cap);
@@ -151,7 +170,7 @@ export function create(stage, { onTilt }) {
           line.push(x, y);
           if (x > X1 || y < Y0 - 1 || y > Y1 + 1) break;
         }
-        for (const z of [-HALF + 0.5, 0, HALF - 0.5]) {
+        for (const z of [0.02, half / 2]) {
           for (let i = 2; i < line.length; i += 2) seg.push(line[i - 2], line[i - 1], z, line[i], line[i + 1], z);
         }
       }
@@ -162,11 +181,8 @@ export function create(stage, { onTilt }) {
 
   // ---------- Particles: advected by the worker, drawn as short streaks coloured by speed ----------
 
-  const COUNT = 3500;
+  const COUNT = 6000;
   const flowParticles = createParticles();
-  flowParticles.setBounds({ x0: X0, x1: X1, y0: Y0, y1: Y1 }, COUNT);
-  // The flow is the same in every section, so each particle keeps its own spanwise station.
-  const pz = Float32Array.from({ length: COUNT }, () => -HALF + Math.random() * 2 * HALF);
   const streakPos = new Float32Array(COUNT * 6),
     streakCol = new Float32Array(COUNT * 6);
   const streakGeo = new THREE.BufferGeometry();
@@ -180,7 +196,7 @@ export function create(stage, { onTilt }) {
   scene.add(particles);
 
   function drawParticles(frame, speed) {
-    const { x, y, u, v, bucket } = frame;
+    const { x, y, z, u, v, w, bucket } = frame;
     const tail = (Math.min(speed, 100) / 50) * 0.25;
     for (let i = 0; i < COUNT; i++) {
       const o = i * 6;
@@ -192,10 +208,10 @@ export function create(stage, { onTilt }) {
       const c = SPEED_COLORS[bucket[i]];
       streakPos[o] = x[i] - u[i] * tail;
       streakPos[o + 1] = y[i] - v[i] * tail;
-      streakPos[o + 2] = pz[i];
+      streakPos[o + 2] = z[i] - w[i] * tail;
       streakPos[o + 3] = x[i];
       streakPos[o + 4] = y[i];
-      streakPos[o + 5] = pz[i];
+      streakPos[o + 5] = z[i];
       streakCol[o] = c.r * 0.15;
       streakCol[o + 1] = c.g * 0.15;
       streakCol[o + 2] = c.b * 0.2;
@@ -207,82 +223,9 @@ export function create(stage, { onTilt }) {
     streakGeo.attributes.color.needsUpdate = true;
   }
 
-  // ---------- Pressure: a see-through slice of the field at the near end of the wing ----------
+  // ---------- Angle of attack and force vectors, at the near tip ----------
 
-  const pressureUniformValues = {
-    uRot: { value: new THREE.Vector2(1, 0) },
-    uFine: { value: /** @type {THREE.DataTexture | null} */ (null) },
-    uFineGrid: { value: new THREE.Vector3() },
-    uFineSize: { value: new THREE.Vector2() },
-    uCoarse: { value: /** @type {THREE.DataTexture | null} */ (null) },
-    uCoarseGrid: { value: new THREE.Vector3() },
-    uCoarseSize: { value: new THREE.Vector2() },
-    uCirculation: { value: new THREE.Vector2() },
-    uCentre: { value: new THREE.Vector2() },
-  };
-  /** @type {import('./aero.js').FlowField | null} */
-  let uploadedField = null;
-
-  /** @param {import('./aero.js').Grid} grid */
-  function gridTexture(grid) {
-    const t = new THREE.DataTexture(grid.tex, grid.nx, grid.ny, THREE.RGBAFormat, THREE.FloatType);
-    t.minFilter = t.magFilter = THREE.NearestFilter;
-    t.needsUpdate = true;
-    return t;
-  }
-  const pressureSlice = new THREE.Mesh(
-    new THREE.PlaneGeometry(X1 - X0, Y1 - Y0),
-    new THREE.ShaderMaterial({
-      uniforms: pressureUniformValues,
-      transparent: true,
-      depthWrite: false,
-      premultipliedAlpha: true,
-      side: THREE.DoubleSide,
-      vertexShader: /* glsl */ `
-        varying vec2 vWorld;
-        void main() {
-          vWorld = (modelMatrix * vec4(position, 1.0)).xy;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }`,
-      fragmentShader: /* glsl */ `
-        precision highp float;
-        varying vec2 vWorld;
-        ${PRESSURE_GLSL}
-        void main() {
-          // Fade out towards the edges so the slice has no visible border.
-          vec2 edge = min(vWorld - vec2(${X0.toFixed(1)}, ${Y0.toFixed(1)}), vec2(${X1.toFixed(1)}, ${Y1.toFixed(1)}) - vWorld);
-          float fade = smoothstep(0.0, 2.5, min(edge.x, edge.y));
-          gl_FragColor = pressureColor(pressureCoefficient(vWorld), 0.7 * fade);
-        }`,
-    }),
-  );
-  // Just behind the end cap: the wing itself hides the slice along its exact outline.
-  pressureSlice.position.set((X0 + X1) / 2, (Y0 + Y1) / 2, HALF - 0.01);
-  scene.add(pressureSlice);
-
-  function updatePressureSlice() {
-    const u = pressureUniformValues;
-    if (uploadedField !== af.field) {
-      u.uFine.value?.dispose();
-      u.uCoarse.value?.dispose();
-      u.uFine.value = gridTexture(af.field.fine);
-      u.uCoarse.value = gridTexture(af.field.coarse);
-      uploadedField = af.field;
-    }
-    const p = pressureUniforms(af.field, flow);
-    u.uRot.value.fromArray(p.rot);
-    u.uFineGrid.value.fromArray(p.fineGrid);
-    u.uFineSize.value.fromArray(p.fineSize);
-    u.uCoarseGrid.value.fromArray(p.coarseGrid);
-    u.uCoarseSize.value.fromArray(p.coarseSize);
-    u.uCirculation.value.fromArray(p.circulation);
-    u.uCentre.value.fromArray(p.centre);
-    pressureSlice.visible = !!show.pressure;
-  }
-
-  // ---------- Angle of attack and force vectors, on the open (near) end of the wing ----------
-
-  const ZF = HALF + 0.03;
+  let ZF = 0.03;
   const labelsEl = document.createElement('div');
   labelsEl.className = 'tags';
   root.append(labelsEl);
@@ -445,16 +388,21 @@ export function create(stage, { onTilt }) {
 
   // Pull back on narrow screens so the whole wing stays in frame.
   const fitFactor = () => Math.max(1, 1.5 / (w / h || 1));
+  // Far enough to take in the whole span.
+  const baseDistance = () => (11 + 1.2 * half) * fitFactor();
+
+  // Middle of the half-wing, a little downstream to take in the tip vortex.
+  const target = TARGET.clone();
 
   function placeDefaultCamera() {
     const { th, ph } = DEFAULT_CAM,
-      r = DEFAULT_CAM.r * fitFactor();
+      r = baseDistance();
     camera.position.set(
-      TARGET.x + r * Math.sin(th) * Math.cos(ph),
-      TARGET.y + r * Math.sin(ph),
-      TARGET.z + r * Math.cos(th) * Math.cos(ph),
+      target.x + r * Math.sin(th) * Math.cos(ph),
+      target.y + r * Math.sin(ph),
+      target.z + r * Math.cos(th) * Math.cos(ph),
     );
-    controls.target.copy(TARGET);
+    controls.target.copy(target);
     controls.update();
   }
 
@@ -485,6 +433,43 @@ export function create(stage, { onTilt }) {
     placeDefaultCamera();
   });
 
+  function sendFlow() {
+    const ac = wingToWorld(af.ac);
+    const vortices = show.vortices
+      ? {
+          x0: ac.x,
+          y0: ac.y,
+          // Rolled up just inboard of the tips.
+          zTip: 0.95 * half,
+          gamma: Aero.rootCirculation(af.chord, aero.CL),
+          core: CORE,
+        }
+      : null;
+    flowParticles.setFlow(af, flow, Aero.stallWake(af, flow, aero), vortices);
+  }
+
+  let boxEnd = 0;
+  /**
+   * Particles fill root to tip; past the tip only when the vortices are shown, since plain air
+   * there would just hide the flow around the wing.
+   */
+  function setParticleBox() {
+    const end = half + (show.vortices ? TIP_MARGIN : 0);
+    if (end === boxEnd) return;
+    boxEnd = end;
+    flowParticles.setBounds({ x0: X0, x1: PARTICLES_X1, y0: Y0 - 0.5, y1: Y1 + 0.5, z0: 0, z1: end }, COUNT, half);
+  }
+
+  /** New span: particle box, arrows at the near tip, and the default framing. */
+  function setSpan(nextHalf) {
+    half = nextHalf;
+    ZF = half + 0.03;
+    setParticleBox();
+    target.set(TARGET.x, TARGET.y, half / 2);
+    controls.maxDistance = 2.5 * baseDistance();
+    if (!userMoved && w) placeDefaultCamera();
+  }
+
   const proj = new THREE.Vector3();
   function placeLabels() {
     for (const key in labels) {
@@ -499,21 +484,23 @@ export function create(stage, { onTilt }) {
   }
 
   return {
-    setFlow(nextAf, nextFlow, nextAero, nextShow) {
+    setFlow(nextAf, nextFlow, nextAero, nextShow, ar) {
       af = nextAf;
       flow = nextFlow;
       aero = nextAero;
       show = nextShow;
-      flowParticles.setFlow(af, flow, Aero.stallWake(af, flow, aero));
-      updatePressureSlice();
+      const nextHalf = af.chord * Math.min(3, 0.8 + ar / 8);
+      if (Math.abs(nextHalf - half) > 1e-6) setSpan(nextHalf);
+      sendFlow();
       buildWing();
       buildStreamlines();
     },
     setShow(nextShow) {
       show = nextShow;
+      setParticleBox();
+      sendFlow();
       buildWing();
       buildStreamlines();
-      updatePressureSlice();
       forceGroup.visible = !!show.forces;
     },
     updateAngle,
@@ -530,7 +517,7 @@ export function create(stage, { onTilt }) {
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      controls.maxDistance = 40 * fitFactor();
+      controls.maxDistance = 2.5 * baseDistance();
       if (!userMoved) placeDefaultCamera();
     },
     frame(dt, time, speed) {

@@ -11,6 +11,7 @@
  * @property {number} speed
  * @property {number} altitude
  * @property {number} area
+ * @property {number} ar aspect ratio
  * @property {number} mass
  * @property {boolean} level
  * @property {Show} show
@@ -25,10 +26,11 @@ export const RANGES = {
   speed: [0, 250],
   altitude: [0, 12000],
   area: [1, 130],
+  ar: [4, 30],
   mass: [100, 100000],
 };
 
-const SHOW_KEYS = /** @type {(keyof Show)[]} */ (['particles', 'pressure', 'streamlines', 'forces']);
+const SHOW_KEYS = /** @type {(keyof Show)[]} */ (['particles', 'pressure', 'streamlines', 'forces', 'vortices']);
 
 /**
  * @param {Settings} settings

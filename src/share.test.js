@@ -10,8 +10,9 @@ const defaults = {
   altitude: 1500,
   area: 16,
   mass: 1100,
+  ar: 7.4,
   level: false,
-  show: { particles: true, streamlines: false, pressure: true, forces: true },
+  show: { particles: true, streamlines: false, pressure: true, forces: true, vortices: false },
 };
 const copy = () => structuredClone(defaults);
 
@@ -35,7 +36,7 @@ describe('encodeSettings', () => {
     s.show.streamlines = true;
     s.show.particles = false;
     expect(encodeSettings(s, '3d', defaults, '3d')).toBe('?show=pressure,streamlines,forces');
-    s.show = { particles: false, streamlines: false, pressure: false, forces: false };
+    s.show = { particles: false, streamlines: false, pressure: false, forces: false, vortices: false };
     expect(encodeSettings(s, '3d', defaults, '3d')).toBe('?show=none');
   });
 });
@@ -51,6 +52,7 @@ describe('decodeSettings', () => {
       altitude: 9000,
       mass: 93500,
       area: 122.5,
+      ar: 9.5,
     };
     s.show.forces = false;
     const { settings, view } = decodeSettings(encodeSettings(s, '2d', defaults, '3d'));
@@ -72,6 +74,7 @@ describe('decodeSettings', () => {
       pressure: false,
       streamlines: false,
       forces: false,
+      vortices: false,
     });
   });
 });

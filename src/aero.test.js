@@ -262,6 +262,72 @@ describe('flaps', () => {
   });
 });
 
+describe('finite wing (lifting line)', () => {
+  const slope = ar => (Aero.coefficients(classic, 6, ar).CL - Aero.coefficients(classic, 2, ar).CL) / 4;
+
+  it('lifts less per degree with a shorter wing, and tends to the section for long ones', () => {
+    expect(slope(6)).toBeLessThan(slope(12));
+    expect(slope(12)).toBeLessThan(slope(Infinity));
+    expect(slope(1000) / slope(Infinity)).toBeCloseTo(1, 2);
+    // Classic result for an elliptic wing: a = a₀ / (1 + a₀ / (π e A)), a₀ per radian.
+    const a0 = slope(Infinity) * (180 / Math.PI);
+    expect(slope(8) * (180 / Math.PI)).toBeCloseTo(a0 / (1 + a0 / (Math.PI * 0.85 * 8)), 1);
+  });
+
+  it('keeps the zero-lift angle, and works the section at α − αᵢ', () => {
+    const w = Aero.coefficients(classic, 6, 8);
+    expect(Aero.coefficients(classic, w.zeroLift, 8).CL).toBeCloseTo(0, 6);
+    expect(w.alphaInduced).toBeCloseTo((w.CL / (Math.PI * 0.85 * 8)) * (180 / Math.PI), 6);
+    expect(Aero.sectionCoefficients(classic, 6 - w.alphaInduced).CL).toBeCloseTo(w.CL, 4);
+  });
+
+  it('has induced drag CL² / (π e A), less for a longer wing', () => {
+    const w = Aero.coefficients(classic, 6, 8);
+    expect(w.CDi).toBeCloseTo((w.CL * w.CL) / (Math.PI * 0.85 * 8), 8);
+    expect(Aero.coefficients(classic, 6, 25).CDi).toBeLessThan(w.CDi);
+  });
+
+  it('stalls at a higher geometric angle but with the same maximum lift', () => {
+    const section = Aero.coefficients(classic, 0),
+      wing = Aero.coefficients(classic, 0, 8);
+    expect(wing.stallPos).toBeGreaterThan(section.stallPos + 2);
+    expect(Aero.coefficients(classic, wing.stallPos, 8).CL).toBeCloseTo(
+      Aero.coefficients(classic, section.stallPos).CL,
+      3,
+    );
+    expect(Aero.coefficients(classic, wing.stallPos - 0.5, 8).stall).toBe(0);
+    expect(Aero.coefficients(classic, wing.stallPos + 2, 8).stall).toBeGreaterThan(0);
+  });
+});
+
+describe('tip vortices', () => {
+  const tv = { x0: 0, y0: 0, zTip: 10, gamma: 2, core: 0.4 };
+
+  it('push the air down between the tips and up outside them', () => {
+    expect(Aero.tipVortexVelocity(tv, 5, 0, 0)[1]).toBeLessThan(0);
+    expect(Aero.tipVortexVelocity(tv, 5, 0, 13)[1]).toBeGreaterThan(0);
+    expect(Aero.tipVortexVelocity(tv, 5, 0, -13)[1]).toBeGreaterThan(0);
+  });
+
+  it('swirl around each tip and vanish far upstream', () => {
+    // The air escapes round the tip from the high-pressure side: outwards below it, inwards above it.
+    expect(Aero.tipVortexVelocity(tv, 5, -1, 10)[2]).toBeGreaterThan(0);
+    expect(Aero.tipVortexVelocity(tv, 5, 1, 10)[2]).toBeLessThan(0);
+    const upstream = Aero.tipVortexVelocity(tv, -200, 0, 0);
+    expect(Math.hypot(...upstream)).toBeLessThan(1e-4);
+  });
+
+  it('match the downwash of an infinite vortex pair far downstream', () => {
+    const [, v] = Aero.tipVortexVelocity(tv, 1e6, 0, 0);
+    // Two infinite vortices at ±zTip: 2 × Γ / (2π zTip), minus a little for the core.
+    expect(v).toBeCloseTo(-(2 * tv.gamma) / (2 * Math.PI * tv.zTip), 3);
+  });
+
+  it('carry the root circulation of an elliptic wing', () => {
+    expect(Aero.rootCirculation(4, 1)).toBeCloseTo(8 / Math.PI, 10);
+  });
+});
+
 describe('velocityClamped', () => {
   it('caps the speed at 3 and reports points inside the wing', () => {
     const flow = Aero.flowFor(5);

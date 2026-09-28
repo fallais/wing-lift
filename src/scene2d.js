@@ -33,7 +33,7 @@ export function create(stage, { onTilt, onNudge }) {
   /** @type {import('./aero.js').Flow} */
   let flow;
   /** @type {import('./view.js').Show} */
-  let show = { particles: false, streamlines: false, pressure: false, forces: false };
+  let show = { particles: false, streamlines: false, pressure: false, forces: false, vortices: false };
   let staticDirty = true,
     active = true;
   let lastAngle = null,
