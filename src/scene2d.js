@@ -1,26 +1,29 @@
-// 2D view of a wing section: Canvas for the flow, SVG for the wing and vectors.
-// Same interface as Scene3D.
+// 2D view of a wing section: WebGL for the pressure map, Canvas for the flow,
+// SVG for the wing and vectors. Same interface as the 3D view.
 import * as Aero from './aero.js';
+import { createParticles, SPEED_COLORS } from './particles.js';
+import { createPressureLayer } from './pressure.js';
 
 const FORCE_SCALE = 1.5;
-
-const SPEED_BUCKETS = [0.6, 0.85, 0.95, 1.05, 1.2, 1.45, Infinity];
-const SPEED_COLORS = ['#f97316', '#fdba74', '#f1e4d4', '#e2e8f0', '#bae6fd', '#7dd3fc', '#0ea5e9'].map(c => c + 'c0');
+const STROKES = SPEED_COLORS.map(c => c + 'c0');
 
 export function create(stage, { onTilt, onNudge }) {
   const root = document.createElement('div');
   root.className = 'view';
-  root.innerHTML = '<canvas></canvas><canvas></canvas><svg aria-hidden="true"></svg>';
+  root.innerHTML = '<canvas></canvas><canvas></canvas><canvas></canvas><svg aria-hidden="true"></svg>';
   stage.prepend(root);
-  const [bgCanvas, fxCanvas] = root.querySelectorAll('canvas');
+  const [glCanvas, bgCanvas, fxCanvas] = root.querySelectorAll('canvas');
   const bgCtx = bgCanvas.getContext('2d');
   const fxCtx = fxCanvas.getContext('2d');
   const svg = root.querySelector('svg');
+  // Without WebGL the pressure map is computed on the CPU, at a coarser resolution.
+  const pressureLayer = createPressureLayer(glCanvas);
   const pressureCanvas = document.createElement('canvas');
+  const particles = createParticles();
   const tmp = { u: 0, v: 0, inside: false };
 
-  const view = { w: 0, h: 0, s: 1, cx: 0, cy: 0, x0: 0, x1: 0, y0: 0, y1: 0 };
-  let af, flow, wake = null, show = {};
+  const view = { w: 0, h: 0, s: 1, cx: 0, cy: 0, x0: 0, x1: 0, y0: 0, y1: 0, dpr: 1 };
+  let af, flow, show = {};
   let staticDirty = true, active = true;
   let lastAngle = null, lastForces = null;
 
@@ -31,96 +34,45 @@ export function create(stage, { onTilt, onNudge }) {
   const sy = y => view.cy - y * view.s;
   const sampleVelocity = (x, y) => Aero.velocityClamped(af, flow, x, y, tmp);
 
-  // ---------- Particles ----------
+  // ---------- Particles: advected by the worker, drawn here as fading streaks ----------
 
-  let count = 0, px, py, ox, oy, phase, life, bucket;
-
-  function initParticles() {
-    count = Math.round(Math.min(3500, view.w * view.h / 900));
-    px = new Float32Array(count);
-    py = new Float32Array(count);
-    ox = new Float32Array(count);
-    oy = new Float32Array(count);
-    phase = new Float32Array(count);
-    life = new Float32Array(count);
-    bucket = new Uint8Array(count);
-    for (let i = 0; i < count; i++) spawn(i, true);
-    fxCtx.clearRect(0, 0, view.w, view.h);
-  }
-
-  function spawn(i, anywhere) {
-    for (let tries = 0; tries < 10; tries++) {
-      const x = anywhere ? view.x0 + Math.random() * (view.x1 - view.x0) : view.x0 - Math.random() * 0.3;
-      const y = view.y0 + Math.random() * (view.y1 - view.y0);
-      if (sampleVelocity(x, y)) { px[i] = ox[i] = x; py[i] = oy[i] = y; break; }
-    }
-    phase[i] = Math.random() * Math.PI * 2;
-    life[i] = 15 + Math.random() * 20;
-    bucket[i] = 255;
-  }
-
-  function stepParticles(dt, time, speed) {
+  function drawParticles(frame) {
     const ctx = fxCtx;
-    if (!show.particles) return;
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = 'rgba(0,0,0,0.14)';
     ctx.fillRect(0, 0, view.w, view.h);
     ctx.globalCompositeOperation = 'source-over';
 
-    // Capped so particles stay readable at airliner speeds.
-    const speedFactor = Math.min(speed, 100) / 50;
-    const k = speedFactor * 1.3 * dt;
-
-    for (let i = 0; i < count; i++) {
-      const x = px[i], y = py[i];
-      life[i] -= dt * speedFactor;
-      if (life[i] <= 0 || !sampleVelocity(x, y)) { spawn(i, life[i] <= 0); continue; }
-
-      let u = tmp.u, v = tmp.v;
-      if (sampleVelocity(x + u * k / 2, y + v * k / 2)) { u = tmp.u; v = tmp.v; }
-
-      const w = Aero.wakeIntensity(wake, x, y);
-      if (w > 0) {
-        u = u * (1 - w) + w * (0.3 + 0.9 * Math.sin(3.1 * y - 5 * time + phase[i]));
-        v = v * (1 - w) + w * 0.9 * Math.cos(2.7 * x - 4 * time + phase[i] * 1.7);
-      }
-
-      ox[i] = x; oy[i] = y;
-      px[i] = x + u * k;
-      py[i] = y + v * k;
-
-      const sp = Math.hypot(u, v);
-      let b = 0;
-      while (sp > SPEED_BUCKETS[b]) b++;
-      bucket[i] = b;
-
-      if (px[i] > view.x1 + 0.3 || py[i] < view.y0 - 0.5 || py[i] > view.y1 + 0.5) spawn(i, false);
-    }
-
+    const { x, y, u, v, bucket, count, k } = frame;
     ctx.lineWidth = 1.3;
     ctx.lineCap = 'butt';
-    for (let b = 0; b < SPEED_COLORS.length; b++) {
-      ctx.strokeStyle = SPEED_COLORS[b];
+    for (let b = 0; b < STROKES.length; b++) {
+      ctx.strokeStyle = STROKES[b];
       ctx.beginPath();
       for (let i = 0; i < count; i++) {
         if (bucket[i] !== b) continue;
-        ctx.moveTo(sx(ox[i]), sy(oy[i]));
-        ctx.lineTo(sx(px[i]), sy(py[i]));
+        ctx.moveTo(sx(x[i] - u[i] * k), sy(y[i] - v[i] * k));
+        ctx.lineTo(sx(x[i]), sy(y[i]));
       }
       ctx.stroke();
     }
   }
 
-  // ---------- Static layer: pressure map & streamlines ----------
+  // ---------- Static layers: pressure map & streamlines ----------
 
   function drawStatic() {
     staticDirty = false;
     bgCtx.clearRect(0, 0, view.w, view.h);
-    if (show.pressure) drawPressure();
+    if (pressureLayer) {
+      if (show.pressure) pressureLayer.draw(af, flow, view, view.dpr);
+      else pressureLayer.clear();
+    } else if (show.pressure) {
+      drawPressureCpu();
+    }
     if (show.streamlines) drawStreamlines();
   }
 
-  function drawPressure() {
+  function drawPressureCpu() {
     const cell = 5;
     const gw = Math.ceil(view.w / cell), gh = Math.ceil(view.h / cell);
     pressureCanvas.width = gw;
@@ -313,8 +265,7 @@ export function create(stage, { onTilt, onNudge }) {
   return {
     setFlow(nextAf, nextFlow, nextAero, nextShow) {
       af = nextAf; flow = nextFlow; show = nextShow;
-      wake = Aero.stallWake(af, flow, nextAero);
-      if (!count && view.w) initParticles();
+      particles.setFlow(af, flow, Aero.stallWake(af, flow, nextAero));
       staticDirty = true;
     },
     setShow(nextShow) {
@@ -339,22 +290,28 @@ export function create(stage, { onTilt, onNudge }) {
         ctx.canvas.height = Math.round(h * scale);
         ctx.setTransform(scale, 0, 0, scale, 0, 0);
       }
+      glCanvas.width = Math.round(w * dpr);
+      glCanvas.height = Math.round(h * dpr);
       svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
 
-      Object.assign(view, { w, h, s: Math.min(w / (w < 640 ? 8 : 11.5), h / 7), cx: w * (w < 640 ? 0.55 : 0.45), cy: h * 0.5 });
+      Object.assign(view, { w, h, dpr, s: Math.min(w / (w < 640 ? 8 : 11.5), h / 7), cx: w * (w < 640 ? 0.55 : 0.45), cy: h * 0.5 });
       view.x0 = -view.cx / view.s;
       view.x1 = (w - view.cx) / view.s;
       view.y0 = -(h - view.cy) / view.s;
       view.y1 = view.cy / view.s;
 
-      if (af) initParticles();
+      particles.setBounds({ x0: view.x0, x1: view.x1, y0: view.y0, y1: view.y1 }, Math.round(Math.min(3500, w * h / 900)));
+      fxCtx.clearRect(0, 0, w, h);
       staticDirty = true;
       redrawOverlay();
     },
     frame(dt, time, speed) {
       if (!af) return;
       if (staticDirty) drawStatic();
-      stepParticles(dt, time, speed);
+      if (!show.particles) return;
+      const frame = particles.take();
+      if (frame) drawParticles(frame);
+      particles.step(dt, time, speed);
     },
   };
 }

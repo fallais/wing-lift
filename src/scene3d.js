@@ -1,6 +1,8 @@
 // 3D view: a straight wing with the same 2D potential flow in every section. World frame: wind along +x, y up, z spanwise.
 import * as THREE from 'three';
 import * as Aero from './aero.js';
+import { createParticles, SPEED_COLORS as SPEED_HEX } from './particles.js';
+import { PRESSURE_GLSL, pressureUniforms } from './pressure.js';
 
 // The colours below are hand-picked display values: skip three's sRGB/linear conversions.
 THREE.ColorManagement.enabled = false;
@@ -9,9 +11,7 @@ const X0 = -7, X1 = 9, Y0 = -4.5, Y1 = 4.5, HALF = 4;
 const TARGET = new THREE.Vector3(1.2, 0.1, 0);
 const DEFAULT_CAM = { th: -0.4, ph: 0.22, r: 16 };
 
-const SPEED_BUCKETS = [0.6, 0.85, 0.95, 1.05, 1.2, 1.45, Infinity];
-const SPEED_COLORS = ['#f97316', '#fdba74', '#f1e4d4', '#e2e8f0', '#bae6fd', '#7dd3fc', '#0ea5e9']
-  .map(c => new THREE.Color(c));
+const SPEED_COLORS = SPEED_HEX.map(c => new THREE.Color(c));
 const WING_RGB = [0.8, 0.84, 0.9], LOW_RGB = [0.23, 0.51, 0.96], HIGH_RGB = [0.94, 0.27, 0.27];
 
 const FORCE_SCALE = 2.2;
@@ -36,7 +36,7 @@ export function create(stage, { onTilt }) {
   scene.add(sun);
 
   const tmp = { u: 0, v: 0, inside: false };
-  let af, flow, aero, wake = null, show = {};
+  let af, flow, aero, show = {};
   let w = 0, h = 0;
 
   const wingToWorld = p => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
@@ -137,11 +137,13 @@ export function create(stage, { onTilt }) {
     streams.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
   }
 
-  // ---------- Particles: short streaks coloured by speed ----------
+  // ---------- Particles: advected by the worker, drawn as short streaks coloured by speed ----------
 
   const COUNT = 3500;
-  const px = new Float32Array(COUNT), py = new Float32Array(COUNT), pz = new Float32Array(COUNT);
-  const phase = new Float32Array(COUNT), life = new Float32Array(COUNT);
+  const flowParticles = createParticles();
+  flowParticles.setBounds({ x0: X0, x1: X1, y0: Y0, y1: Y1 }, COUNT);
+  // The flow is the same in every section, so each particle keeps its own spanwise station.
+  const pz = Float32Array.from({ length: COUNT }, () => -HALF + Math.random() * 2 * HALF);
   const streakPos = new Float32Array(COUNT * 6), streakCol = new Float32Array(COUNT * 6);
   const streakGeo = new THREE.BufferGeometry();
   streakGeo.setAttribute('position', new THREE.BufferAttribute(streakPos, 3).setUsage(THREE.DynamicDrawUsage));
@@ -151,54 +153,67 @@ export function create(stage, { onTilt }) {
   particles.frustumCulled = false;
   scene.add(particles);
 
-  function spawn(i, anywhere) {
-    for (let tries = 0; tries < 10; tries++) {
-      const x = anywhere ? X0 + Math.random() * (X1 - X0) : X0 - Math.random() * 0.3;
-      const y = Y0 + Math.random() * (Y1 - Y0);
-      if (sampleVelocity(x, y)) { px[i] = x; py[i] = y; break; }
-    }
-    pz[i] = -HALF + Math.random() * 2 * HALF;
-    phase[i] = Math.random() * Math.PI * 2;
-    life[i] = 15 + Math.random() * 20;
-  }
-
-  function stepParticles(dt, time, speed) {
-    particles.visible = !!show.particles;
-    if (!show.particles) return;
-    // Capped so particles stay readable at airliner speeds.
-    const speedFactor = Math.min(speed, 100) / 50;
-    const k = speedFactor * 1.3 * dt;
-    const tail = speedFactor * 0.25;
-
+  function drawParticles(frame, speed) {
+    const { x, y, u, v, bucket } = frame;
+    const tail = Math.min(speed, 100) / 50 * 0.25;
     for (let i = 0; i < COUNT; i++) {
-      const x = px[i], y = py[i];
-      life[i] -= dt * speedFactor;
-      if (life[i] <= 0 || !sampleVelocity(x, y)) { spawn(i, life[i] <= 0); continue; }
-
-      let u = tmp.u, v = tmp.v;
-      if (sampleVelocity(x + u * k / 2, y + v * k / 2)) { u = tmp.u; v = tmp.v; }
-
-      const wk = Aero.wakeIntensity(wake, x, y);
-      if (wk > 0) {
-        u = u * (1 - wk) + wk * (0.3 + 0.9 * Math.sin(3.1 * y - 5 * time + phase[i]));
-        v = v * (1 - wk) + wk * 0.9 * Math.cos(2.7 * x - 4 * time + phase[i] * 1.7);
+      const o = i * 6;
+      // Just respawned: park the streak out of sight until its next step.
+      if (bucket[i] === 255) {
+        streakPos[o + 1] = streakPos[o + 4] = -1000;
+        continue;
       }
-
-      px[i] = x + u * k;
-      py[i] = y + v * k;
-      if (px[i] > X1 + 0.3 || py[i] < Y0 || py[i] > Y1) spawn(i, false);
-
-      const sp = Math.hypot(u, v);
-      let b = 0;
-      while (sp > SPEED_BUCKETS[b]) b++;
-      const c = SPEED_COLORS[b], o = i * 6;
-      streakPos[o] = px[i] - u * tail; streakPos[o + 1] = py[i] - v * tail; streakPos[o + 2] = pz[i];
-      streakPos[o + 3] = px[i]; streakPos[o + 4] = py[i]; streakPos[o + 5] = pz[i];
+      const c = SPEED_COLORS[bucket[i]];
+      streakPos[o] = x[i] - u[i] * tail; streakPos[o + 1] = y[i] - v[i] * tail; streakPos[o + 2] = pz[i];
+      streakPos[o + 3] = x[i]; streakPos[o + 4] = y[i]; streakPos[o + 5] = pz[i];
       streakCol[o] = c.r * 0.15; streakCol[o + 1] = c.g * 0.15; streakCol[o + 2] = c.b * 0.2;
       streakCol[o + 3] = c.r; streakCol[o + 4] = c.g; streakCol[o + 5] = c.b;
     }
     streakGeo.attributes.position.needsUpdate = true;
     streakGeo.attributes.color.needsUpdate = true;
+  }
+
+  // ---------- Pressure: a see-through slice of the field at the near end of the wing ----------
+
+  const pressureUniformValues = {
+    uRot: { value: new THREE.Vector2(1, 0) },
+    uCircle: { value: new THREE.Vector3() },
+    uGamma: { value: 0 },
+  };
+  const pressureSlice = new THREE.Mesh(
+    new THREE.PlaneGeometry(X1 - X0, Y1 - Y0),
+    new THREE.ShaderMaterial({
+      uniforms: pressureUniformValues,
+      transparent: true,
+      depthWrite: false,
+      premultipliedAlpha: true,
+      side: THREE.DoubleSide,
+      vertexShader: /* glsl */ `
+        varying vec2 vWorld;
+        void main() {
+          vWorld = (modelMatrix * vec4(position, 1.0)).xy;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        precision highp float;
+        varying vec2 vWorld;
+        ${PRESSURE_GLSL}
+        void main() {
+          // Fade out towards the edges so the slice has no visible border.
+          vec2 edge = min(vWorld - vec2(${X0.toFixed(1)}, ${Y0.toFixed(1)}), vec2(${X1.toFixed(1)}, ${Y1.toFixed(1)}) - vWorld);
+          float fade = smoothstep(0.0, 2.5, min(edge.x, edge.y));
+          gl_FragColor = pressureColor(pressureCoefficient(vWorld), 0.7 * fade);
+        }`,
+    }));
+  pressureSlice.position.set((X0 + X1) / 2, (Y0 + Y1) / 2, HALF + 0.01);
+  scene.add(pressureSlice);
+
+  function updatePressureSlice() {
+    const p = pressureUniforms(af, flow);
+    pressureUniformValues.uRot.value.set(p.rot[0], p.rot[1]);
+    pressureUniformValues.uCircle.value.set(p.circle[0], p.circle[1], p.circle[2]);
+    pressureUniformValues.uGamma.value = p.gamma;
+    pressureSlice.visible = !!show.pressure;
   }
 
   // ---------- Angle of attack and force vectors, on the open (near) end of the wing ----------
@@ -376,10 +391,9 @@ export function create(stage, { onTilt }) {
 
   return {
     setFlow(nextAf, nextFlow, nextAero, nextShow) {
-      const first = !af;
       af = nextAf; flow = nextFlow; aero = nextAero; show = nextShow;
-      if (first) for (let i = 0; i < COUNT; i++) spawn(i, true);
-      wake = Aero.stallWake(af, flow, aero);
+      flowParticles.setFlow(af, flow, Aero.stallWake(af, flow, aero));
+      updatePressureSlice();
       buildWing();
       buildStreamlines();
     },
@@ -387,6 +401,7 @@ export function create(stage, { onTilt }) {
       show = nextShow;
       buildWing();
       buildStreamlines();
+      updatePressureSlice();
       forceGroup.visible = !!show.forces;
     },
     updateAngle,
@@ -404,7 +419,12 @@ export function create(stage, { onTilt }) {
       placeCamera();
     },
     frame(dt, time, speed) {
-      stepParticles(dt, time, speed);
+      particles.visible = !!show.particles;
+      if (show.particles) {
+        const frame = flowParticles.take();
+        if (frame) drawParticles(frame, speed);
+        flowParticles.step(dt, time, speed);
+      }
       forceGroup.visible = !!show.forces;
       renderer.render(scene, camera);
       placeLabels();

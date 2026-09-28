@@ -1,7 +1,6 @@
 import './style.css';
 import * as Aero from './aero.js';
 import * as Scene2D from './scene2d.js';
-import * as Scene3D from './scene3d.js';
 
 const G = 9.81;
 const Q_REF = 0.5 * 1.225 * 50 * 50 * 16;
@@ -184,7 +183,7 @@ function updateAlpha() {
   }
   aero = Aero.coefficients(af, state.alpha);
   flow = Aero.flowFor(af, state.alpha);
-  scene.setFlow(af, flow, aero, state.show);
+  scene?.setFlow(af, flow, aero, state.show);
   updateAlarm();
   render();
 }
@@ -245,25 +244,33 @@ const sceneInput = {
   onNudge: sign => setAlpha(state.alpha + sign * 0.5),
 };
 
+// three.js is only downloaded the first time the 3D view is opened.
 function sceneFor(mode) {
   if (!(mode in scenes)) {
-    try {
-      scenes[mode] = (mode === '3d' ? Scene3D : Scene2D).create(stage, sceneInput);
-    } catch (e) {
-      scenes[mode] = null;
-    }
+    scenes[mode] = (mode === '3d' ? import('./scene3d.js') : Promise.resolve(Scene2D))
+      .then(module => module.create(stage, sceneInput))
+      .catch(() => null);
   }
   return scenes[mode];
 }
 
-function setMode(mode) {
-  // No WebGL: stay in 2D.
-  if (mode === '3d' && !sceneFor('3d')) {
+let modeRequest = 0;
+async function setMode(mode) {
+  const request = ++modeRequest;
+  let next = await sceneFor(mode);
+  // No WebGL, or the 3D code failed to load: stay in 2D.
+  if (!next) {
     mode = '2d';
     document.querySelector('[data-mode="3d"]').disabled = true;
+    next = await sceneFor(mode);
   }
-  if (scene) scene.setActive(false);
-  scene = sceneFor(mode);
+  // A later click won while this view was loading.
+  if (request !== modeRequest) {
+    next.setActive(next === scene);
+    return;
+  }
+  if (scene && scene !== next) scene.setActive(false);
+  scene = next;
   scene.setActive(true);
   state.mode = mode;
   stage.dataset.mode = mode;
@@ -275,6 +282,7 @@ function setMode(mode) {
 }
 
 function drawForces() {
+  if (!scene) return;
   scene.updateAngle(state.alpha, `α = ${fmt(state.alpha, 1)}°`);
   // Arrow length in lift coefficient units, relative to 50 m/s and 16 m².
   const f = forces();
@@ -447,7 +455,7 @@ function bindControls() {
     box.addEventListener('change', () => {
       state.show[box.dataset.show] = box.checked;
       $('pressureKey').hidden = !state.show.pressure;
-      scene.setShow(state.show);
+      scene?.setShow(state.show);
     });
   });
   document.querySelectorAll('[data-mode]').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
@@ -473,7 +481,7 @@ function frame(now) {
   const dt = Math.min(0.08, (now - last) / 1000);
   last = now;
   time += dt;
-  if (visible && stage.clientWidth && stage.clientHeight) scene.frame(dt, time, state.speed);
+  if (scene && visible && stage.clientWidth && stage.clientHeight) scene.frame(dt, time, state.speed);
   requestAnimationFrame(frame);
 }
 
@@ -487,6 +495,6 @@ bindControls();
 setMode(savedMode);
 updateShape();
 applyLanguage();
-new ResizeObserver(() => scene.resize()).observe(stage);
+new ResizeObserver(() => scene?.resize()).observe(stage);
 new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }).observe(stage);
 requestAnimationFrame(frame);
