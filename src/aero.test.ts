@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import * as Aero from './aero.js';
+import * as Aero from './aero';
+import type { Airfoil, Coefficients, Flow, Point } from './aero';
 
 const classic = Aero.makeAirfoil(11, 5);
 const symmetric = Aero.makeAirfoil(12, 0);
 const flapped = Aero.makeAirfoil(11, 5, 20);
 
 /** Wing-frame point to world frame, as the views do. */
-const toWorld = (flow, p) => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
+const toWorld = (flow: Flow, p: Point) => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
 
-function velocity(af, flow, x, y) {
+function velocity(af: Airfoil, flow: Flow, x: number, y: number) {
   const out = { u: 0, v: 0, inside: false };
   Aero.velocityWorld(af.field, flow, x, y, out);
   return out;
@@ -18,7 +19,7 @@ function velocity(af, flow, x, y) {
  * Exact potential flow around the same Joukowski airfoil (conformal mapping), world frame.
  * The panel method must reproduce it when the flap is retracted.
  */
-function joukowski(thicknessPct, camberPct, alphaDeg, x, y) {
+function joukowski(thicknessPct: number, camberPct: number, alphaDeg: number, x: number, y: number) {
   const eps = Math.max(0.004, thicknessPct / 100 / 1.299);
   const mx = -eps,
     my = (2 * camberPct) / 100;
@@ -198,7 +199,7 @@ describe('panel method', () => {
 
   it('flags points inside the wing, flap included', () => {
     const flow = Aero.flowFor(5);
-    const inside = (af, x) => {
+    const inside = (af: Airfoil, x: number) => {
       const p = toWorld(flow, { x, y: (Aero.surfaceY(af.upper, x) + Aero.surfaceY(af.lower, x)) / 2 });
       return velocity(af, flow, p.x, p.y).inside;
     };
@@ -244,7 +245,7 @@ describe('coefficients', () => {
 describe('flaps', () => {
   const clean = Aero.coefficients(classic, 0);
   const down = Aero.coefficients(flapped, 0);
-  const clMax = (af, co) => Aero.coefficients(af, co.stallPos).CL;
+  const clMax = (af: Airfoil, co: Coefficients) => Aero.coefficients(af, co.stallPos).CL;
 
   it('give more lift at the same angle', () => {
     expect(down.CL).toBeGreaterThan(clean.CL + 0.5);
@@ -263,7 +264,7 @@ describe('flaps', () => {
 });
 
 describe('finite wing (lifting line)', () => {
-  const slope = ar => (Aero.coefficients(classic, 6, ar).CL - Aero.coefficients(classic, 2, ar).CL) / 4;
+  const slope = (ar: number) => (Aero.coefficients(classic, 6, ar).CL - Aero.coefficients(classic, 2, ar).CL) / 4;
 
   it('lifts less per degree with a shorter wing, and tends to the section for long ones', () => {
     expect(slope(6)).toBeLessThan(slope(12));
@@ -347,7 +348,7 @@ describe('stall wake', () => {
     expect(Aero.stallWake(classic, Aero.flowFor(5), Aero.coefficients(classic, 5))).toBeNull();
     const flow = Aero.flowFor(20);
     const wake = Aero.stallWake(classic, flow, Aero.coefficients(classic, 20));
-    expect(wake).not.toBeNull();
+    if (!wake) throw new Error('expected a wake once stalled');
     const y = (wake.top + wake.bot) / 2;
     expect(Aero.wakeIntensity(wake, wake.x0 + 0.5, y)).toBeGreaterThan(Aero.wakeIntensity(wake, wake.x0 + 5, y));
     expect(Aero.wakeIntensity(wake, wake.x0 - 1, y)).toBe(0);

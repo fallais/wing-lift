@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeSettings, encodeSettings } from './share.js';
+import { decodeSettings, encodeSettings } from './share';
 
 const defaults = {
   thickness: 11,

@@ -1,141 +1,147 @@
-import * as Aero from './aero.js';
-import * as Scene2D from './scene2d.js';
-import { decodeSettings, encodeSettings } from './share.js';
-import { createSolver } from './solver.js';
+import * as Aero from './aero';
+import type { Airfoil, Coefficients, Flow } from './aero';
+import * as Scene2D from './scene2d';
+import { decodeSettings, encodeSettings, type NumericSetting, type Settings, type ViewMode } from './share';
+import { createSolver } from './solver';
+import type { Show, View, ViewInput } from './view';
 
 const G = 9.81;
 const Q_REF = 0.5 * 1.225 * 50 * 50 * 16;
 
-const I18N = {
-  fr: {
-    title: "Portance d'une aile",
-    subtitle: 'Soufflerie virtuelle',
-    help: 'Aide',
-    profile: 'Profil',
-    pClassic: 'Classique',
-    pSymmetric: 'Symétrique',
-    pFlat: 'Plaque plane',
-    pCambered: 'Très cambré',
-    pCustom: 'Personnalisé',
-    thickness: 'Épaisseur',
-    camber: 'Cambrure',
-    flap: 'Volets',
-    flight: 'Vol',
-    alpha: 'Incidence α',
-    speed: 'Vitesse V',
-    altitude: 'Altitude',
-    area: 'Surface S',
-    mass: 'Masse',
-    aircraft: 'Avion',
-    plGlider: 'Planeur',
-    plCessna: 'Cessna 172',
-    plPc12: 'Pilatus PC-12',
-    plA321: 'Airbus A321',
-    level: 'Vol en palier (α automatique)',
-    showParticles: 'Particules',
-    showStreamlines: 'Lignes de courant',
-    showPressure: 'Pression',
-    showForces: 'Forces',
-    showVortices: 'Tourbillons marginaux',
-    stallAlarm: 'Alarme de décrochage',
-    results: 'Résultats',
-    rCd: 'Cx (traînée)',
-    rRho: 'Masse volumique ρ',
-    hLd: 'Finesse',
-    rQ: 'Pression dynamique q',
-    rDrag: 'Traînée',
-    rInduced: 'dont traînée induite',
-    rSpan: 'Envergure b = √(A · S)',
-    ar: 'Allongement A',
-    rRes: 'Résultante',
-    rMass: 'Masse soutenue',
-    chart: 'Courbe Cz(α)',
-    stall: 'Décrochage !',
-    tooSlow: 'Trop lent pour voler !',
-    share: 'Partager',
-    copied: 'Lien copié !',
-    legLow: 'dépression',
-    legHigh: 'surpression',
-    hintOrbit: 'Glisser : tourner la vue',
-    hintTilt: 'Maj + glisser : incidence',
-    hintZoom: 'Molette : zoom · double-clic : recentrer',
-    hintScale: "Envergure raccourcie à l'écran",
-    hint2d: 'Glisser verticalement ou molette : incidence',
-    lift: 'Portance',
-    drag: 'Traînée',
-    res: 'Résultante',
-    weight: 'Poids',
-    cl: 'Cz',
-    liftSym: 'P',
-    caption: (z, s) => `Portance nulle à α = ${z}° · décrochage vers ${s}° · pointillés : profil seul (aile infinie)`,
-  },
-  en: {
-    title: 'Wing lift',
-    subtitle: 'Virtual wind tunnel',
-    help: 'Help',
-    profile: 'Airfoil',
-    pClassic: 'Classic',
-    pSymmetric: 'Symmetric',
-    pFlat: 'Flat plate',
-    pCambered: 'High camber',
-    pCustom: 'Custom',
-    thickness: 'Thickness',
-    camber: 'Camber',
-    flap: 'Flaps',
-    flight: 'Flight',
-    alpha: 'Angle of attack α',
-    speed: 'Airspeed V',
-    altitude: 'Altitude',
-    area: 'Wing area S',
-    mass: 'Mass',
-    aircraft: 'Aircraft',
-    plGlider: 'Glider',
-    plCessna: 'Cessna 172',
-    plPc12: 'Pilatus PC-12',
-    plA321: 'Airbus A321',
-    level: 'Level flight (automatic α)',
-    showParticles: 'Particles',
-    showStreamlines: 'Streamlines',
-    showPressure: 'Pressure',
-    showForces: 'Forces',
-    showVortices: 'Tip vortices',
-    stallAlarm: 'Stall warning',
-    results: 'Results',
-    rCd: 'CD (drag)',
-    rRho: 'Air density ρ',
-    hLd: 'L/D',
-    rQ: 'Dynamic pressure q',
-    rDrag: 'Drag',
-    rInduced: 'of which induced drag',
-    rSpan: 'Wingspan b = √(A · S)',
-    ar: 'Aspect ratio A',
-    rRes: 'Resultant',
-    rMass: 'Supported mass',
-    chart: 'CL(α) curve',
-    stall: 'Stall!',
-    tooSlow: 'Too slow to fly!',
-    share: 'Share',
-    copied: 'Link copied!',
-    legLow: 'low pressure',
-    legHigh: 'high pressure',
-    hintOrbit: 'Drag: rotate the view',
-    hintTilt: 'Shift + drag: angle of attack',
-    hintZoom: 'Wheel: zoom · double-click: reset',
-    hintScale: 'Span shortened on screen',
-    hint2d: 'Drag vertically or scroll: angle of attack',
-    lift: 'Lift',
-    drag: 'Drag',
-    res: 'Resultant',
-    weight: 'Weight',
-    cl: 'CL',
-    liftSym: 'L',
-    caption: (z, s) => `Zero lift at α = ${z}° · stall around ${s}° · dashed: airfoil alone (infinite wing)`,
-  },
+const FR = {
+  title: "Portance d'une aile",
+  subtitle: 'Soufflerie virtuelle',
+  help: 'Aide',
+  profile: 'Profil',
+  pClassic: 'Classique',
+  pSymmetric: 'Symétrique',
+  pFlat: 'Plaque plane',
+  pCambered: 'Très cambré',
+  pCustom: 'Personnalisé',
+  thickness: 'Épaisseur',
+  camber: 'Cambrure',
+  flap: 'Volets',
+  flight: 'Vol',
+  alpha: 'Incidence α',
+  speed: 'Vitesse V',
+  altitude: 'Altitude',
+  area: 'Surface S',
+  mass: 'Masse',
+  aircraft: 'Avion',
+  plGlider: 'Planeur',
+  plCessna: 'Cessna 172',
+  plPc12: 'Pilatus PC-12',
+  plA321: 'Airbus A321',
+  level: 'Vol en palier (α automatique)',
+  showParticles: 'Particules',
+  showStreamlines: 'Lignes de courant',
+  showPressure: 'Pression',
+  showForces: 'Forces',
+  showVortices: 'Tourbillons marginaux',
+  stallAlarm: 'Alarme de décrochage',
+  results: 'Résultats',
+  rCd: 'Cx (traînée)',
+  rRho: 'Masse volumique ρ',
+  hLd: 'Finesse',
+  rQ: 'Pression dynamique q',
+  rDrag: 'Traînée',
+  rInduced: 'dont traînée induite',
+  rSpan: 'Envergure b = √(A · S)',
+  ar: 'Allongement A',
+  rRes: 'Résultante',
+  rMass: 'Masse soutenue',
+  chart: 'Courbe Cz(α)',
+  stall: 'Décrochage !',
+  tooSlow: 'Trop lent pour voler !',
+  share: 'Partager',
+  copied: 'Lien copié !',
+  legLow: 'dépression',
+  legHigh: 'surpression',
+  hintOrbit: 'Glisser : tourner la vue',
+  hintTilt: 'Maj + glisser : incidence',
+  hintZoom: 'Molette : zoom · double-clic : recentrer',
+  hintScale: "Envergure raccourcie à l'écran",
+  hint2d: 'Glisser verticalement ou molette : incidence',
+  lift: 'Portance',
+  drag: 'Traînée',
+  res: 'Résultante',
+  weight: 'Poids',
+  cl: 'Cz',
+  liftSym: 'P',
+  caption: (z: string, s: string) =>
+    `Portance nulle à α = ${z}° · décrochage vers ${s}° · pointillés : profil seul (aile infinie)`,
 };
+// Same keys as French, checked by the type.
+const EN: typeof FR = {
+  title: 'Wing lift',
+  subtitle: 'Virtual wind tunnel',
+  help: 'Help',
+  profile: 'Airfoil',
+  pClassic: 'Classic',
+  pSymmetric: 'Symmetric',
+  pFlat: 'Flat plate',
+  pCambered: 'High camber',
+  pCustom: 'Custom',
+  thickness: 'Thickness',
+  camber: 'Camber',
+  flap: 'Flaps',
+  flight: 'Flight',
+  alpha: 'Angle of attack α',
+  speed: 'Airspeed V',
+  altitude: 'Altitude',
+  area: 'Wing area S',
+  mass: 'Mass',
+  aircraft: 'Aircraft',
+  plGlider: 'Glider',
+  plCessna: 'Cessna 172',
+  plPc12: 'Pilatus PC-12',
+  plA321: 'Airbus A321',
+  level: 'Level flight (automatic α)',
+  showParticles: 'Particles',
+  showStreamlines: 'Streamlines',
+  showPressure: 'Pressure',
+  showForces: 'Forces',
+  showVortices: 'Tip vortices',
+  stallAlarm: 'Stall warning',
+  results: 'Results',
+  rCd: 'CD (drag)',
+  rRho: 'Air density ρ',
+  hLd: 'L/D',
+  rQ: 'Dynamic pressure q',
+  rDrag: 'Drag',
+  rInduced: 'of which induced drag',
+  rSpan: 'Wingspan b = √(A · S)',
+  ar: 'Aspect ratio A',
+  rRes: 'Resultant',
+  rMass: 'Supported mass',
+  chart: 'CL(α) curve',
+  stall: 'Stall!',
+  tooSlow: 'Too slow to fly!',
+  share: 'Share',
+  copied: 'Link copied!',
+  legLow: 'low pressure',
+  legHigh: 'high pressure',
+  hintOrbit: 'Drag: rotate the view',
+  hintTilt: 'Shift + drag: angle of attack',
+  hintZoom: 'Wheel: zoom · double-click: reset',
+  hintScale: 'Span shortened on screen',
+  hint2d: 'Drag vertically or scroll: angle of attack',
+  lift: 'Lift',
+  drag: 'Drag',
+  res: 'Resultant',
+  weight: 'Weight',
+  cl: 'CL',
+  liftSym: 'L',
+  caption: (z: string, s: string) =>
+    `Zero lift at α = ${z}° · stall around ${s}° · dashed: airfoil alone (infinite wing)`,
+};
+type Lang = 'fr' | 'en';
+const I18N: Record<Lang, typeof FR> = { fr: FR, en: EN };
+type TextKey = Exclude<keyof typeof FR, 'caption'>;
 
 // Rounded to the slider steps.
 // Aspect ratio = span² / area: a long, slender glider wing versus stubbier light aircraft and airliners.
-const PLANES = {
+const PLANES: Record<string, { mass: number; area: number; ar: number }> = {
   glider: { mass: 600, area: 18, ar: 16 },
   cessna: { mass: 1100, area: 16, ar: 7.4 },
   pc12: { mass: 4750, area: 26, ar: 10.3 },
@@ -145,15 +151,22 @@ const PLANES = {
 // Mass slider is logarithmic (100 kg to 100 t) so a glider and an airliner both get usable resolution.
 const MASS_MIN = 100,
   MASS_MAX = 100000;
-const massToSlider = m => Math.round((1000 * Math.log(m / MASS_MIN)) / Math.log(MASS_MAX / MASS_MIN));
-const sliderToMass = v => {
+const massToSlider = (m: number) => Math.round((1000 * Math.log(m / MASS_MIN)) / Math.log(MASS_MAX / MASS_MIN));
+const sliderToMass = (v: number) => {
   const m = MASS_MIN * (MASS_MAX / MASS_MIN) ** (v / 1000);
   const step = m < 1000 ? 10 : m < 10000 ? 50 : 500;
   return Math.round(m / step) * step;
 };
 const SPEED_MAX = 250;
 
-const state = {
+interface State extends Settings {
+  lang: Lang;
+  alarm: boolean;
+  mode: ViewMode;
+}
+
+const DEFAULT_VIEW: ViewMode = '3d';
+const state: State = {
   lang: 'fr',
   thickness: 11,
   camber: 5,
@@ -167,26 +180,33 @@ const state = {
   level: false,
   alarm: false,
   show: { particles: true, streamlines: false, pressure: true, forces: true, vortices: false },
+  mode: DEFAULT_VIEW,
 };
 const DEFAULTS = structuredClone(state);
-const DEFAULT_VIEW = '3d';
 
-// DOM lookups. The ids come from index.html, so their elements are left untyped.
-/** @param {string} id @returns {any} */
-const $ = id => document.getElementById(id);
-/** @param {string} selector @returns {HTMLElement[]} */
-const $$ = selector => [...document.querySelectorAll(/** @type {any} */ (selector))];
+// DOM lookups. The ids come from index.html: a missing one is a bug, so it throws.
+function $<T extends HTMLElement = HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`#${id} is missing from index.html`);
+  return el as T;
+}
+const $input = (id: string) => $<HTMLInputElement>(id);
+const $$ = <T extends HTMLElement = HTMLElement>(selector: string) => [...document.querySelectorAll<T>(selector)];
 const stage = $('stage');
-let af, aero, flow, clMax;
+// The airfoil arrives from the solver worker; nothing is computed before it.
+let af: Airfoil | null = null;
+let aero!: Coefficients;
+let flow!: Flow;
+let clMax = 0;
 let time = 0;
 
-const tr = key => I18N[state.lang][key];
-const fmt = (n, d = 0) => n.toLocaleString(state.lang, { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtForce = n => (Math.abs(n) >= 1000 ? `${fmt(n / 1000, 2)} kN` : `${fmt(n)} N`);
-const fmtMass = kg => (Math.abs(kg) >= 1000 ? `${fmt(kg / 1000, 2)} t` : `${fmt(kg)} kg`);
+const tr = (key: TextKey) => I18N[state.lang][key];
+const fmt = (n: number, d = 0) => n.toLocaleString(state.lang, { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtForce = (n: number) => (Math.abs(n) >= 1000 ? `${fmt(n / 1000, 2)} kN` : `${fmt(n)} N`);
+const fmtMass = (kg: number) => (Math.abs(kg) >= 1000 ? `${fmt(kg / 1000, 2)} t` : `${fmt(kg)} kg`);
 
-/** Coefficients of the whole wing (lifting line), at a geometric angle of attack. */
-const wing = (/** @type {number} */ alpha) => Aero.coefficients(af, alpha, state.ar);
+/** Coefficients of the whole wing (lifting line), at a geometric angle of attack. Only once the airfoil is known. */
+const wing = (alpha: number) => Aero.coefficients(af!, alpha, state.ar);
 
 function forces() {
   const rho = Aero.airDensity(state.altitude);
@@ -242,7 +262,7 @@ function updateAlpha() {
   if (!af) return;
   if (state.level) {
     state.alpha = levelAlpha();
-    $('alpha').value = state.alpha;
+    $input('alpha').value = String(state.alpha);
   }
   aero = wing(state.alpha);
   flow = Aero.flowFor(state.alpha);
@@ -255,7 +275,7 @@ function updateAlpha() {
 
 // Like the real ones, it sounds a little before the stall angle, and keeps going once stalled.
 const ALARM_MARGIN = 1;
-let alarm = null;
+let alarm: ReturnType<typeof createAlarm> | null = null;
 
 function stallWarning() {
   return aero.stall > 0 || state.alpha >= aero.stallPos - ALARM_MARGIN;
@@ -304,8 +324,7 @@ function render() {
 
 // ---------- Shareable link: the address bar always holds the current setup ----------
 
-const shareUrl = () =>
-  location.origin + location.pathname + encodeSettings(state, state.mode || DEFAULT_VIEW, DEFAULTS, DEFAULT_VIEW);
+const shareUrl = () => location.origin + location.pathname + encodeSettings(state, state.mode, DEFAULTS, DEFAULT_VIEW);
 
 let urlTimer = 0;
 function scheduleUrlUpdate() {
@@ -332,13 +351,10 @@ async function share() {
 
 // ---------- Stage: 2D or 3D view ----------
 
-/** @type {Record<string, Promise<import('./view.js').View | null>>} */
-const scenes = {};
-/** @type {import('./view.js').View | null} */
-let scene = null;
+const scenes: Partial<Record<ViewMode, Promise<View | null>>> = {};
+let scene: View | null = null;
 let tiltFrom = 0;
-/** @type {import('./view.js').ViewInput} */
-const sceneInput = {
+const sceneInput: ViewInput = {
   // Drag distance in pixels, upwards positive, counted from the start of the drag.
   onTilt: (dy, start) => {
     if (start) tiltFrom = state.alpha;
@@ -348,19 +364,16 @@ const sceneInput = {
 };
 
 // three.js is only downloaded the first time the 3D view is opened.
-function sceneFor(mode) {
-  if (!(mode in scenes)) {
-    scenes[mode] = (mode === '3d' ? import('./scene3d.js') : Promise.resolve(Scene2D))
-      .then(module => module.create(stage, sceneInput))
-      .catch(() => null);
-  }
-  return scenes[mode];
+function sceneFor(mode: ViewMode): Promise<View | null> {
+  const loading: Promise<{ create: typeof Scene2D.create }> =
+    mode === '3d' ? import('./scene3d') : Promise.resolve(Scene2D);
+  return (scenes[mode] ??= loading.then(module => module.create(stage, sceneInput)).catch(() => null));
 }
 
 let modeRequest = 0;
 let modeLoading = false;
 const syncLoading = () => stage.classList.toggle('loading', modeLoading || !af);
-async function setMode(mode) {
+async function setMode(mode: ViewMode) {
   const request = ++modeRequest;
   // Spinner while the view is created; the first 3D switch also downloads three.js.
   modeLoading = true;
@@ -369,10 +382,11 @@ async function setMode(mode) {
   // No WebGL, or the 3D code failed to load: stay in 2D.
   if (!next) {
     mode = '2d';
-    $$('[data-mode="3d"]').forEach(b => {
-      /** @type {HTMLButtonElement} */ (b).disabled = true;
+    $$<HTMLButtonElement>('[data-mode="3d"]').forEach(b => {
+      b.disabled = true;
     });
     next = await sceneFor(mode);
+    if (!next) return;
   }
   // A later click won while this view was loading.
   if (request !== modeRequest) {
@@ -414,6 +428,7 @@ function drawForces() {
 // ---------- Panel ----------
 
 function drawChart() {
+  if (!af) return;
   const W = 300,
     H = 170,
     L = 30,
@@ -425,8 +440,8 @@ function drawChart() {
     C0 = -1.6,
     // Room for the higher maximum lift with flaps.
     C1 = Math.max(2.4, clMax + 0.4);
-  const X = a => L + ((a - A0) / (A1 - A0)) * (W - L - R);
-  const Y = c => T + ((C1 - c) / (C1 - C0)) * (H - T - B);
+  const X = (a: number) => L + ((a - A0) / (A1 - A0)) * (W - L - R);
+  const Y = (c: number) => T + ((C1 - c) / (C1 - C0)) * (H - T - B);
 
   let s = '';
   s += `<rect class="zone" x="${X(Math.min(A1, aero.stallPos))}" y="${T}" width="${Math.max(0, X(A1) - X(aero.stallPos))}" height="${H - T - B}"/>`;
@@ -441,8 +456,8 @@ function drawChart() {
   }
 
   // Dashed: the airfoil section (infinite wing). Solid: this wing, which lifts less per degree.
-  const pts = [],
-    sectionPts = [];
+  const pts: string[] = [],
+    sectionPts: string[] = [];
   for (let a = A0; a <= A1; a += 0.5) {
     const cl = Math.max(C0, Math.min(C1, Aero.sectionCoefficients(af, a).CL));
     sectionPts.push(`${X(a).toFixed(1)},${Y(cl).toFixed(1)}`);
@@ -463,7 +478,7 @@ function drawChart() {
   s += `<circle class="dot" cx="${cx}" cy="${cy}" r="5"/>`;
   $('chart').innerHTML = s;
 
-  $('chartCaption').textContent = tr('caption')(fmt(aero.zeroLift, 1), fmt(aero.stallPos, 1));
+  $('chartCaption').textContent = I18N[state.lang].caption(fmt(aero.zeroLift, 1), fmt(aero.stallPos, 1));
 }
 
 function updateReadouts() {
@@ -518,19 +533,19 @@ function updatePresetUI() {
   for (const [name, p] of Object.entries(Aero.PRESETS)) {
     if (p.thickness === state.thickness && p.camber === state.camber) current = name;
   }
-  $('preset').value = current;
+  $input('preset').value = current;
 
   let plane = 'custom';
   for (const [name, p] of Object.entries(PLANES)) {
     if (p.mass === state.mass && p.area === state.area && p.ar === state.ar) plane = name;
   }
-  $('plane').value = plane;
+  $input('plane').value = plane;
 }
 
 function applyLanguage() {
   document.documentElement.lang = state.lang;
   $$('[data-i18n]').forEach(el => {
-    el.textContent = tr(el.dataset.i18n);
+    el.textContent = tr(el.dataset.i18n as TextKey);
   });
   $$('[data-lang]').forEach(b => b.classList.toggle('active', b.dataset.lang === state.lang));
   document.title = tr('title');
@@ -544,23 +559,23 @@ function applyLanguage() {
 
 // ---------- Wiring ----------
 
-function setLevel(on) {
+function setLevel(on: boolean) {
   state.level = on;
-  $('level').checked = on;
+  $input('level').checked = on;
 }
 
 // Speed, density, area and mass change the angle needed for level flight.
 const flightChanged = () => (state.level ? updateAlpha() : render());
 
-function setAlpha(value) {
+function setAlpha(value: number) {
   setLevel(false);
   state.alpha = Math.round(Math.max(-20, Math.min(25, value)) * 10) / 10;
-  $('alpha').value = state.alpha;
+  $input('alpha').value = String(state.alpha);
   updateAlpha();
 }
 
 function bindControls() {
-  const ranges = {
+  const ranges: Record<NumericSetting, () => void> = {
     thickness: updateShape,
     camber: updateShape,
     flap: updateShape,
@@ -574,10 +589,10 @@ function bindControls() {
     mass: flightChanged,
     ar: wingChanged,
   };
-  for (const [key, onChange] of Object.entries(ranges)) {
-    const input = $(key);
-    const toState = key === 'mass' ? sliderToMass : Number;
-    input.value = key === 'mass' ? massToSlider(state.mass) : state[key];
+  for (const [key, onChange] of Object.entries(ranges) as [NumericSetting, () => void][]) {
+    const input = $input(key);
+    const toState = key === 'mass' ? (v: string) => sliderToMass(Number(v)) : Number;
+    input.value = String(key === 'mass' ? massToSlider(state.mass) : state[key]);
     input.addEventListener('input', () => {
       state[key] = toState(input.value);
       onChange();
@@ -585,62 +600,64 @@ function bindControls() {
   }
 
   $('preset').addEventListener('change', () => {
-    Object.assign(state, Aero.PRESETS[$('preset').value]);
-    $('thickness').value = state.thickness;
-    $('camber').value = state.camber;
+    Object.assign(state, Aero.PRESETS[$input('preset').value]);
+    $input('thickness').value = String(state.thickness);
+    $input('camber').value = String(state.camber);
     updateShape();
   });
 
   $('plane').addEventListener('change', () => {
-    Object.assign(state, PLANES[$('plane').value]);
-    $('mass').value = massToSlider(state.mass);
-    $('area').value = state.area;
-    $('ar').value = state.ar;
+    Object.assign(state, PLANES[$input('plane').value]);
+    $input('mass').value = String(massToSlider(state.mass));
+    $input('area').value = String(state.area);
+    $input('ar').value = String(state.ar);
     wingChanged();
   });
 
   $('level').addEventListener('change', () => {
-    setLevel($('level').checked);
+    setLevel($input('level').checked);
     updateAlpha();
   });
   $('alarm').addEventListener('change', () => {
-    state.alarm = $('alarm').checked;
+    state.alarm = $input('alarm').checked;
     updateAlarm();
   });
   document.addEventListener('visibilitychange', updateAlarm);
 
-  /** @type {HTMLInputElement[]} */ ($$('[data-show]')).forEach(box => {
-    box.checked = state.show[box.dataset.show];
+  $$<HTMLInputElement>('[data-show]').forEach(box => {
+    const key = box.dataset.show as keyof Show;
+    box.checked = state.show[key];
     box.addEventListener('change', () => {
-      state.show[box.dataset.show] = box.checked;
+      state.show[key] = box.checked;
       $('pressureKey').hidden = !state.show.pressure;
       scene?.setShow(state.show);
       scheduleUrlUpdate();
     });
   });
-  $$('[data-mode]').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+  $$('[data-mode]').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode as ViewMode)));
   // The legend holds the display toggles: clicking it must not tilt the wing or turn the camera.
   $('legend').addEventListener('pointerdown', e => e.stopPropagation());
   $('pressureKey').hidden = !state.show.pressure;
 
   $$('[data-lang]').forEach(btn =>
     btn.addEventListener('click', () => {
-      state.lang = btn.dataset.lang;
+      state.lang = btn.dataset.lang as Lang;
       applyLanguage();
     }),
   );
 
   $('shareBtn').addEventListener('click', share);
-  $('helpBtn').addEventListener('click', () => $('help').showModal());
-  $('help').addEventListener('click', e => {
-    if (e.target === $('help')) $('help').close();
+  const help = $<HTMLDialogElement>('help');
+  $('helpBtn').addEventListener('click', () => help.showModal());
+  help.addEventListener('click', e => {
+    if (e.target === help) help.close();
   });
 }
 
 const FRAME_MS = 1000 / 30;
 let last = performance.now();
 let visible = true;
-function frame(now) {
+function frame(now: number) {
   if (now - last < FRAME_MS - 2) {
     requestAnimationFrame(frame);
     return;
@@ -652,9 +669,10 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-let savedMode = DEFAULT_VIEW;
+let savedMode: ViewMode = DEFAULT_VIEW;
 try {
-  state.lang = localStorage.getItem('lang') || (navigator.language.startsWith('fr') ? 'fr' : 'en');
+  const lang = localStorage.getItem('lang');
+  state.lang = lang === 'fr' || lang === 'en' ? lang : navigator.language.startsWith('fr') ? 'fr' : 'en';
   if (localStorage.getItem('view') === '2d') savedMode = '2d';
 } catch {
   /* default */

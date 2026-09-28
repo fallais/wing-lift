@@ -5,23 +5,24 @@
 // In 2D the particles live in the airfoil section. In 3D (a finite wing of half span
 // `half`), the section flow applies along the span and fades past the tips, the tip
 // vortices add their swirl, and particles move spanwise too.
-import { tipVortexVelocity, velocityClamped, wakeIntensity } from './aero.js';
-import { SPEED_BUCKETS, layout } from './particle-frame.js';
+import {
+  tipVortexVelocity,
+  velocityClamped,
+  wakeIntensity,
+  type Flow,
+  type FlowField,
+  type TipVortices,
+  type Wake,
+} from './aero';
+import { SPEED_BUCKETS, layout, type FromParticleWorker, type ToParticleWorker } from './particle-frame';
 
-/** @typedef {import('./aero.js').Flow} Flow */
-/** @typedef {import('./aero.js').Wake} Wake */
-/** @typedef {import('./aero.js').TipVortices} TipVortices */
-/** @typedef {import('./particle-frame.js').Bounds} Bounds */
+// The DOM typings describe `self` as a window; the worker scope has the same messaging API as a Worker.
+const scope = self as unknown as Worker;
 
-/** @type {import('./aero.js').FlowField | null} */
-let field = null;
-/** @type {Flow | null} */
-let flow = null;
-/** @type {Wake | null} */
-let wake = null;
-/** @type {TipVortices | null} */
-let vortices = null;
-/** @type {Bounds} */
+let field: FlowField | null = null;
+let flow: Flow | null = null;
+let wake: Wake | null = null;
+let vortices: TipVortices | null = null;
 let bounds = { x0: 0, x1: 0, y0: 0, y1: 0, z0: 0, z1: 0 };
 /** Half span of the 3D wing; 0 in 2D. */
 let half = 0;
@@ -39,13 +40,9 @@ const TIP_SHARE = 0.4;
 // Past the tips, the section flow fades out over this distance.
 const TIP_FADE = 1.5;
 
-/**
- * Velocity at a point into `vel`; false inside the wing.
- * @param {number} px
- * @param {number} py
- * @param {number} pz
- */
-function sample(px, py, pz) {
+/** Velocity at a point into `vel`; false inside the wing. */
+function sample(px: number, py: number, pz: number): boolean {
+  if (!field || !flow) return false;
   if (!half) {
     if (!velocityClamped(field, flow, px, py, tmp)) return false;
     vel.u = tmp.u;
@@ -84,8 +81,7 @@ function sample(px, py, pz) {
 /** Normal random number, for the clouds released around the tips. */
 const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
 
-/** @param {number} i @param {boolean} anywhere */
-function spawn(i, anywhere) {
+function spawn(i: number, anywhere: boolean) {
   const { x0, x1, y0, y1, z0, z1 } = bounds;
   // Tips inside the particle box (only the left one when the view shows the left half-wing).
   const tips = [-half, half].filter(t => t >= z0 - 1 && t <= z1 + 1);
@@ -114,13 +110,8 @@ function spawnAll() {
   spawned = true;
 }
 
-/**
- * @param {ArrayBuffer} buffer
- * @param {number} dt
- * @param {number} time
- * @param {number} speed airspeed in m/s
- */
-function step(buffer, dt, time, speed) {
+/** Moves every particle by one frame; `speed` is the airspeed in m/s. Returns the step factor k. */
+function step(buffer: ArrayBuffer, dt: number, time: number, speed: number): number {
   const out = layout(buffer, count);
   // Capped so particles stay readable at airliner speeds.
   const speedFactor = Math.min(speed, 100) / 50;
@@ -175,11 +166,11 @@ function step(buffer, dt, time, speed) {
   return k;
 }
 
-self.onmessage = ({ data }) => {
+scope.onmessage = ({ data }: MessageEvent<ToParticleWorker>) => {
   switch (data.type) {
     case 'bounds':
       bounds = { z0: 0, z1: 0, ...data.bounds };
-      half = data.half || 0;
+      half = data.half;
       count = data.count;
       x = new Float32Array(count);
       y = new Float32Array(count);
@@ -195,13 +186,14 @@ self.onmessage = ({ data }) => {
     case 'flow':
       flow = data.flow;
       wake = data.wake;
-      vortices = data.vortices || null;
+      vortices = data.vortices;
       if (field && !spawned) spawnAll();
       break;
     case 'step': {
-      const ready = field && flow && data.count === count;
+      const ready = !!field && !!flow && data.count === count;
       const k = ready ? step(data.buffer, data.dt, data.time, data.speed) : 0;
-      self.postMessage({ buffer: data.buffer, count: data.count, k, ready }, { transfer: [data.buffer] });
+      const reply: FromParticleWorker = { buffer: data.buffer, count: data.count, k, ready };
+      scope.postMessage(reply, { transfer: [data.buffer] });
       break;
     }
   }

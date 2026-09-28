@@ -7,59 +7,125 @@
 // velocity grids; any angle of attack is then a mix of the α = 0° and α = 90°
 // solutions, so changing the angle costs nothing.
 
-/** @typedef {{ x: number, y: number }} Point */
+export interface Point {
+  x: number;
+  y: number;
+}
+
 /**
  * Velocity grid in the wing frame. Per node, `vel` holds (u, v) for α = 0° then for α = 90°;
  * `tex` holds what the pressure shader needs: |V₀|², V₀·V₉₀, |V₉₀|² and 1 inside the wing.
  * Nodes inside the wing carry values extended from outside, so interpolation stays smooth at the surface.
- * @typedef {{ x0: number, y0: number, h: number, nx: number, ny: number, vel: Float32Array, tex: Float32Array }} Grid
  */
-/**
- * Everything needed to evaluate the flow, small enough to send to workers and the GPU.
- * @typedef {object} FlowField
- * @property {Float32Array} outline x, y pairs of the closed outline, for inside tests
- * @property {[number, number, number, number]} box outline bounding box: x0, y0, x1, y1
- * @property {Grid} fine near the wing
- * @property {Grid} coarse further away
- * @property {[number, number]} circulation for α = 0° and α = 90°, clockwise positive
- * @property {Point} centre where the far field puts the equivalent point vortex
- */
-/**
- * Airfoil in its own frame: chord along x, retracted trailing edge at x = 2.
- * @typedef {object} Airfoil
- * @property {number} thickness fraction of the chord
- * @property {number} flap flap deflection, degrees, trailing edge down
- * @property {Point[]} pts closed outline, counter-clockwise from the trailing edge, upper surface first
- * @property {Point[]} upper trailing edge to leading edge
- * @property {Point[]} lower leading edge to trailing edge
- * @property {Point} le leading edge
- * @property {Point} te trailing edge, lowered by the flap
- * @property {number} xTE retracted trailing edge abscissa: the chord line runs from le to (xTE, 0)
- * @property {number} chord reference (retracted) chord
- * @property {Point} ac aerodynamic centre, at a quarter chord
- * @property {Point} hinge flap hinge, at 75 % chord on the camber line
- * @property {number} alpha0 zero-lift angle of the inviscid flow, degrees
- * @property {number} alpha0Clean the same with the flap retracted
- * @property {number} clSlope inviscid lift: CL = clSlope · sin(α − alpha0)
- * @property {Float32Array} surfaceSpeed per outline point: tangential speed for α = 0° then α = 90°
- * @property {FlowField} field
- */
-/**
- * @typedef {object} Coefficients
- * @property {number} CL lift coefficient
- * @property {number} CD drag coefficient
- * @property {number} CDi induced drag coefficient, part of CD
- * @property {number} alphaInduced induced angle αᵢ, degrees: the section works at α − αᵢ
- * @property {number} stall 0 before the stall, rising to 1 when fully separated
- * @property {number} stallVis how turbulent the wake looks, 0 to 1
- * @property {1 | -1} side sign of the effective angle of attack
- * @property {number} zeroLift zero-lift angle, degrees
- * @property {number} stallPos stall angle, degrees
- * @property {number} stallNeg negative stall angle, degrees
- */
-/** @typedef {{ ca: number, sa: number }} Flow cos α and sin α */
-/** @typedef {{ u: number, v: number, inside: boolean }} Velocity */
-/** @typedef {{ x0: number, top: number, bot: number, spreadUp: number, spreadDown: number, len: number, k: number }} Wake */
+export interface Grid {
+  x0: number;
+  y0: number;
+  h: number;
+  nx: number;
+  ny: number;
+  vel: Float32Array;
+  tex: Float32Array;
+}
+
+/** Everything needed to evaluate the flow, small enough to send to workers and the GPU. */
+export interface FlowField {
+  /** x, y pairs of the closed outline, for inside tests. */
+  outline: Float32Array;
+  /** Outline bounding box: x0, y0, x1, y1. */
+  box: [number, number, number, number];
+  /** Near the wing. */
+  fine: Grid;
+  /** Further away. */
+  coarse: Grid;
+  /** For α = 0° and α = 90°, clockwise positive. */
+  circulation: [number, number];
+  /** Where the far field puts the equivalent point vortex. */
+  centre: Point;
+}
+
+/** Airfoil outline in its own frame: chord along x, retracted trailing edge at x = 2. */
+export interface Shape {
+  /** Fraction of the chord. */
+  thickness: number;
+  /** Flap deflection, degrees, trailing edge down. */
+  flap: number;
+  /** Closed outline, counter-clockwise from the trailing edge, upper surface first. */
+  pts: Point[];
+  /** Trailing edge to leading edge. */
+  upper: Point[];
+  /** Leading edge to trailing edge. */
+  lower: Point[];
+  /** Leading edge. */
+  le: Point;
+  /** Trailing edge, lowered by the flap. */
+  te: Point;
+  /** Retracted trailing edge abscissa: the chord line runs from le to (xTE, 0). */
+  xTE: number;
+  /** Reference (retracted) chord. */
+  chord: number;
+  /** Aerodynamic centre, at a quarter chord. */
+  ac: Point;
+  /** Flap hinge, at 75 % chord on the camber line. */
+  hinge: Point;
+}
+
+/** Shape plus its flow. */
+export interface Airfoil extends Shape {
+  /** Zero-lift angle of the inviscid flow, degrees. */
+  alpha0: number;
+  /** The same with the flap retracted. */
+  alpha0Clean: number;
+  /** Inviscid lift: CL = clSlope · sin(α − alpha0). */
+  clSlope: number;
+  /** Per outline point: tangential speed for α = 0° then α = 90°. */
+  surfaceSpeed: Float32Array;
+  field: FlowField;
+}
+
+export interface Coefficients {
+  /** Lift coefficient. */
+  CL: number;
+  /** Drag coefficient. */
+  CD: number;
+  /** Induced drag coefficient, part of CD. */
+  CDi: number;
+  /** Induced angle αᵢ, degrees: the section works at α − αᵢ. */
+  alphaInduced: number;
+  /** 0 before the stall, rising to 1 when fully separated. */
+  stall: number;
+  /** How turbulent the wake looks, 0 to 1. */
+  stallVis: number;
+  /** Sign of the effective angle of attack. */
+  side: 1 | -1;
+  /** Zero-lift angle, degrees. */
+  zeroLift: number;
+  /** Stall angle, degrees. */
+  stallPos: number;
+  /** Negative stall angle, degrees. */
+  stallNeg: number;
+}
+
+/** cos α and sin α. */
+export interface Flow {
+  ca: number;
+  sa: number;
+}
+
+export interface Velocity {
+  u: number;
+  v: number;
+  inside: boolean;
+}
+
+export interface Wake {
+  x0: number;
+  top: number;
+  bot: number;
+  spreadUp: number;
+  spreadDown: number;
+  len: number;
+  k: number;
+}
 
 const DEG = Math.PI / 180;
 const VISCOUS_FACTOR = 0.85;
@@ -68,20 +134,15 @@ const PANELS = 160;
 const FLAP_CHORD = 0.25;
 const MAX_FLAP = 40;
 
-/** @type {Record<string, { thickness: number, camber: number }>} */
-const PRESETS = {
+const PRESETS: Record<string, { thickness: number; camber: number }> = {
   classic: { thickness: 11, camber: 5 },
   symmetric: { thickness: 12, camber: 0 },
   flat: { thickness: 1.5, camber: 0 },
   cambered: { thickness: 12, camber: 10 },
 };
 
-/**
- * Height of a surface polyline at abscissa x (0 outside it).
- * @param {Point[]} list
- * @param {number} x
- */
-function surfaceY(list, x) {
+/** Height of a surface polyline at abscissa x (0 outside it). */
+function surfaceY(list: Point[], x: number) {
   for (let i = 0; i < list.length - 1; i++) {
     const a = list[i],
       b = list[i + 1];
@@ -97,17 +158,14 @@ function surfaceY(list, x) {
 /**
  * Joukowski outline: circle of centre (mx, my) through ζ = 1, mapped by z = ζ + 1/ζ.
  * Trailing edge at z = 2, chord close to 4, points bunched at both edges.
- * @param {number} thicknessPct
- * @param {number} camberPct
  */
-function joukowskiOutline(thicknessPct, camberPct) {
+function joukowskiOutline(thicknessPct: number, camberPct: number) {
   const eps = Math.max(0.004, thicknessPct / 100 / 1.299);
   const mx = -eps,
     my = (2 * camberPct) / 100;
   const R = Math.hypot(1 - mx, my);
   const beta = Math.atan2(my, 1 - mx);
-  /** @type {Point[]} */
-  const pts = [];
+  const pts: Point[] = [];
   for (let i = 0; i <= PANELS; i++) {
     const th = -beta + (2 * Math.PI * i) / PANELS;
     const zx = mx + R * Math.cos(th),
@@ -123,11 +181,8 @@ function joukowskiOutline(thicknessPct, camberPct) {
 /**
  * Airfoil shape, with the rear 25 % bent down around a hinge at 75 % chord.
  * The bend is spread over a short knee so the outline stays smooth.
- * @param {number} thicknessPct
- * @param {number} camberPct
- * @param {number} [flapDeg]
  */
-function makeShape(thicknessPct, camberPct, flapDeg = 0) {
+function makeShape(thicknessPct: number, camberPct: number, flapDeg: number = 0) {
   const base = joukowskiOutline(thicknessPct, camberPct);
   let iLE = 0;
   base.forEach((p, i) => {
@@ -178,14 +233,10 @@ function makeShape(thicknessPct, camberPct, flapDeg = 0) {
 /**
  * Influence of the linear vortex panels on the velocity component along direction φ at (x, y),
  * for a unit strength at each panel node. Adds into `out` (length panels + 1).
- * @param {PanelSet} P
- * @param {number} x
- * @param {number} y
- * @param {number} cphi cos φ
- * @param {number} sphi sin φ
- * @param {Float64Array} out
+ * `cphi`: cos φ
+ * `sphi`: sin φ
  */
-function tangentInfluence(P, x, y, cphi, sphi, out) {
+function tangentInfluence(P: PanelSet, x: number, y: number, cphi: number, sphi: number, out: Float64Array) {
   const { xb, yb, len, cos, sin } = P;
   for (let j = 0; j < P.n; j++) {
     const dx = x - xb[j],
@@ -211,15 +262,21 @@ function tangentInfluence(P, x, y, cphi, sphi, out) {
   }
 }
 
-/**
- * @typedef {{ n: number, xb: Float64Array, yb: Float64Array, len: Float64Array, cos: Float64Array, sin: Float64Array }} PanelSet
- */
+/** Panel nodes (clockwise from the trailing edge) and, per panel, its length and direction. */
+interface PanelSet {
+  n: number;
+  xb: Float64Array;
+  yb: Float64Array;
+  len: Float64Array;
+  cos: Float64Array;
+  sin: Float64Array;
+}
 
 /**
  * Solves the panel strengths for α = 0° and α = 90°. Nodes run clockwise from the trailing edge.
- * @param {Point[]} pts counter-clockwise outline (as in Airfoil.pts)
+ * `pts`: counter-clockwise outline (as in Airfoil.pts)
  */
-function solvePanels(pts) {
+function solvePanels(pts: Point[]) {
   const n = pts.length - 1;
   const xb = new Float64Array(n + 1),
     yb = new Float64Array(n + 1);
@@ -241,8 +298,7 @@ function solvePanels(pts) {
     xc[j] = (xb[j] + xb[j + 1]) / 2;
     yc[j] = (yb[j] + yb[j + 1]) / 2;
   }
-  /** @type {PanelSet} */
-  const P = { n, xb, yb, len, cos, sin };
+  const P: PanelSet = { n, xb, yb, len, cos, sin };
 
   // Normal-velocity equations at each control point, plus the Kutta condition.
   const m = n + 1;
@@ -306,16 +362,16 @@ function solvePanels(pts) {
     circ0 += Math.PI * (g0[i] + g0[i + 1]) * len[i];
     circ90 += Math.PI * (g90[i] + g90[i + 1]) * len[i];
   }
-  return { P, g0, g90, v0, v90, circ: /** @type {[number, number]} */ ([circ0, circ90]) };
+  return { P, g0, g90, v0, v90, circ: [circ0, circ90] as [number, number] };
 }
 
 /**
  * Gaussian elimination with partial pivoting, several right-hand sides.
- * @param {Float64Array} M square matrix, row-major, destroyed
- * @param {number} m size
- * @param {Float64Array[]} rhs destroyed
+ * `M`: square matrix, row-major, destroyed
+ * `m`: size
+ * `rhs`: destroyed
  */
-function solveLinear(M, m, rhs) {
+function solveLinear(M: Float64Array, m: number, rhs: Float64Array[]) {
   for (let k = 0; k < m; k++) {
     let p = k;
     for (let i = k + 1; i < m; i++) if (Math.abs(M[i * m + k]) > Math.abs(M[p * m + k])) p = i;
@@ -348,12 +404,9 @@ const scratch = { u: new Float64Array(PANELS + 2), v: new Float64Array(PANELS + 
 
 /**
  * Exact panel velocity at a point of the wing frame, for α = 0° and α = 90°.
- * @param {ReturnType<typeof solvePanels>} sol
- * @param {number} x
- * @param {number} y
- * @returns {[number, number, number, number]} u₀, v₀, u₉₀, v₉₀
+ * Returns u₀, v₀, u₉₀, v₉₀
  */
-function panelVelocity(sol, x, y) {
+function panelVelocity(sol: ReturnType<typeof solvePanels>, x: number, y: number): [number, number, number, number] {
   const { P, g0, g90 } = sol;
   const u = scratch.u.fill(0),
     v = scratch.v.fill(0);
@@ -372,12 +425,7 @@ function panelVelocity(sol, x, y) {
   return [u0, v0, u90, v90];
 }
 
-/**
- * @param {Float32Array} outline
- * @param {number} x
- * @param {number} y
- */
-function insideOutline(outline, x, y) {
+function insideOutline(outline: Float32Array, x: number, y: number) {
   let inside = false;
   for (let i = 0, j = outline.length - 2; i < outline.length; j = i, i += 2) {
     const xi = outline[i],
@@ -391,18 +439,21 @@ function insideOutline(outline, x, y) {
 
 /**
  * Samples the panel solution on a grid; inside nodes get values spread from their outside neighbours.
- * @param {ReturnType<typeof solvePanels>} sol
- * @param {Float32Array} outline
- * @param {number} x0
- * @param {number} y0
- * @param {number} x1
- * @param {number} y1
- * @param {number} h node spacing
- * @param {Point} te trailing edge
- * @param {(x: number, y: number) => boolean} [skip] nodes covered by a finer grid
- * @returns {Grid}
+ * `h`: node spacing
+ * `te`: trailing edge
+ * `skip`: nodes covered by a finer grid
  */
-function sampleGrid(sol, outline, x0, y0, x1, y1, h, te, skip) {
+function sampleGrid(
+  sol: ReturnType<typeof solvePanels>,
+  outline: Float32Array,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  h: number,
+  te: Point,
+  skip?: (x: number, y: number) => boolean,
+): Grid {
   const nx = Math.round((x1 - x0) / h) + 1,
     ny = Math.round((y1 - y0) / h) + 1;
   const vel = new Float32Array(nx * ny * 4),
@@ -476,12 +527,8 @@ const COARSE = { x0: -16, y0: -14, x1: 16, y1: 14, h: 0.25 };
 /**
  * Shape, panel solution and velocity grids for one airfoil. Takes a few hundred milliseconds:
  * the page runs it in a worker.
- * @param {number} thicknessPct
- * @param {number} camberPct
- * @param {number} [flapDeg]
- * @returns {Airfoil}
  */
-function makeAirfoil(thicknessPct, camberPct, flapDeg = 0) {
+function makeAirfoil(thicknessPct: number, camberPct: number, flapDeg: number = 0): Airfoil {
   const shape = makeShape(thicknessPct, camberPct, flapDeg);
   const sol = solvePanels(shape.pts);
   const n = shape.pts.length - 1;
@@ -503,8 +550,7 @@ function makeAirfoil(thicknessPct, camberPct, flapDeg = 0) {
   const fine = sampleGrid(sol, outline, FINE.x0, FINE.y0, FINE.x1, FINE.y1, FINE.h, shape.te);
   // Coarse nodes well inside the fine grid are never read: coarse cells are only used outside it.
   const m = COARSE.h * 1.01;
-  const inFine = (/** @type {number} */ x, /** @type {number} */ y) =>
-    x > FINE.x0 + m && x < FINE.x1 - m && y > FINE.y0 + m && y < FINE.y1 - m;
+  const inFine = (x: number, y: number) => x > FINE.x0 + m && x < FINE.x1 - m && y > FINE.y0 + m && y < FINE.y1 - m;
   const coarse = sampleGrid(sol, outline, COARSE.x0, COARSE.y0, COARSE.x1, COARSE.y1, COARSE.h, shape.te, inFine);
 
   // Surface speed per outline point: average of the two panels around it (solver order is reversed).
@@ -543,15 +589,7 @@ function makeAirfoil(thicknessPct, camberPct, flapDeg = 0) {
   };
 }
 
-/**
- * @param {Grid} g
- * @param {number} x
- * @param {number} y
- * @param {number} ca
- * @param {number} sa
- * @param {Velocity} out
- */
-function sampleVelocity(g, x, y, ca, sa, out) {
+function sampleVelocity(g: Grid, x: number, y: number, ca: number, sa: number, out: Velocity) {
   const fx = (x - g.x0) / g.h,
     fy = (y - g.y0) / g.h;
   const i = Math.min(g.nx - 2, Math.max(0, Math.floor(fx))),
@@ -567,20 +605,13 @@ function sampleVelocity(g, x, y, ca, sa, out) {
     w01 = (1 - tx) * ty,
     w11 = tx * ty;
   const d = g.vel;
-  const at = (/** @type {number} */ c) => w00 * d[k00 + c] + w10 * d[k10 + c] + w01 * d[k01 + c] + w11 * d[k11 + c];
+  const at = (c: number) => w00 * d[k00 + c] + w10 * d[k10 + c] + w01 * d[k01 + c] + w11 * d[k11 + c];
   out.u = ca * at(0) + sa * at(2);
   out.v = ca * at(1) + sa * at(3);
 }
 
-/**
- * World frame: wind blows along +x, the wing is pitched nose-up by α.
- * @param {FlowField} field
- * @param {Flow} flow
- * @param {number} x
- * @param {number} y
- * @param {Velocity} out
- */
-function velocityWorld(field, flow, x, y, out) {
+/** World frame: wind blows along +x, the wing is pitched nose-up by α. */
+function velocityWorld(field: FlowField, flow: Flow, x: number, y: number, out: Velocity) {
   const { ca, sa } = flow;
   const zx = x * ca - y * sa,
     zy = x * sa + y * ca;
@@ -591,7 +622,7 @@ function velocityWorld(field, flow, x, y, out) {
   }
   out.inside = false;
   const { fine, coarse } = field;
-  const inGrid = (/** @type {Grid} */ g) =>
+  const inGrid = (g: Grid) =>
     zx >= g.x0 && zy >= g.y0 && zx <= g.x0 + (g.nx - 1) * g.h && zy <= g.y0 + (g.ny - 1) * g.h;
   if (inGrid(fine)) sampleVelocity(fine, zx, zy, ca, sa, out);
   else if (inGrid(coarse)) sampleVelocity(coarse, zx, zy, ca, sa, out);
@@ -610,15 +641,8 @@ function velocityWorld(field, flow, x, y, out) {
   out.v = -U * sa + V * ca;
 }
 
-/**
- * Same as velocityWorld, capped near the sharp trailing edge. False inside the wing.
- * @param {FlowField} field
- * @param {Flow} flow
- * @param {number} x
- * @param {number} y
- * @param {Velocity} out
- */
-function velocityClamped(field, flow, x, y, out) {
+/** Same as velocityWorld, capped near the sharp trailing edge. False inside the wing. */
+function velocityClamped(field: FlowField, flow: Flow, x: number, y: number, out: Velocity) {
   velocityWorld(field, flow, x, y, out);
   if (out.inside) return false;
   const sp = Math.hypot(out.u, out.v);
@@ -631,11 +655,9 @@ function velocityClamped(field, flow, x, y, out) {
 
 /**
  * Pressure coefficient along the outline, from the panel solution.
- * @param {Airfoil} af
- * @param {Flow} flow
- * @returns {Float32Array} one value per outline point
+ * Returns one value per outline point
  */
-function surfacePressure(af, flow) {
+function surfacePressure(af: Airfoil, flow: Flow): Float32Array {
   const n = af.pts.length;
   const cp = new Float32Array(n);
   for (let k = 0; k < n; k++) {
@@ -649,10 +671,8 @@ function surfacePressure(af, flow) {
 
 /**
  * Airfoil section (infinite wing): lift from the panel solution, then an empirical stall; profile drag.
- * @param {Airfoil} af
- * @param {number} alphaDeg
  */
-function sectionCoefficients(af, alphaDeg) {
+function sectionCoefficients(af: Airfoil, alphaDeg: number) {
   // Past 15°, the air starts to separate from a real flap: scale its effect down, to 60 % at 40°.
   const flapEfficiency = 1 - 0.4 * Math.min(1, Math.max(0, (af.flap - 15) / 25));
   const zeroLift = af.alpha0Clean + flapEfficiency * (af.alpha0 - af.alpha0Clean);
@@ -661,8 +681,7 @@ function sectionCoefficients(af, alphaDeg) {
   const stallAngle = Math.min(17, 9 + 50 * af.thickness);
   const stallPosEff = stallAngle + 0.8 * camberDeg;
   const stallNegEff = stallAngle - 0.2 * camberDeg;
-  /** @param {number} ae */
-  const linear = ae => VISCOUS_FACTOR * af.clSlope * Math.sin(ae * DEG);
+  const linear = (ae: number) => VISCOUS_FACTOR * af.clSlope * Math.sin(ae * DEG);
 
   const ae = alphaDeg + camberDeg;
   const side = ae >= 0 ? 1 : -1;
@@ -687,7 +706,7 @@ function sectionCoefficients(af, alphaDeg) {
     CDp: cd0 + separated,
     stall,
     stallVis: over > 0 ? Math.min(1, 0.3 + over / 8) : 0,
-    /** @type {1 | -1} */ side: /** @type {1 | -1} */ (side),
+    side: side as 1 | -1,
     zeroLift,
     stallPos: stallPosEff - camberDeg,
     stallNeg: -stallNegEff - camberDeg,
@@ -698,12 +717,10 @@ function sectionCoefficients(af, alphaDeg) {
  * Whole wing of aspect ratio `ar`, with Prandtl's lifting-line theory: the trailing vortices push the air
  * down (downwash), so every section works at a lower effective angle α − αᵢ, with αᵢ = CL / (π e A),
  * and the lift leans back, giving the induced drag CL² / (π e A). An infinite aspect ratio gives the section.
- * @param {Airfoil} af
- * @param {number} alphaDeg geometric angle of attack
- * @param {number} [ar] aspect ratio, span² / area
- * @returns {Coefficients}
+ * `alphaDeg`: geometric angle of attack
+ * `ar`: aspect ratio, span² / area
  */
-function coefficients(af, alphaDeg, ar = Infinity) {
+function coefficients(af: Airfoil, alphaDeg: number, ar: number = Infinity): Coefficients {
   // Induced angle per unit of lift coefficient, in degrees.
   const k = Number.isFinite(ar) ? 1 / (Math.PI * OSWALD * ar) / DEG : 0;
   // CL = CL_section(α − k·CL): the left side minus the right side grows with CL, so bisection finds it.
@@ -720,7 +737,7 @@ function coefficients(af, alphaDeg, ar = Infinity) {
   const CL = k ? CLwing : sec.CL;
   const CDi = k ? (CL * CL) / (Math.PI * OSWALD * ar) : 0;
   // The section stalls at a fixed effective angle; the wing gets there at a higher geometric angle.
-  const atStall = (/** @type {number} */ a) => a + k * sectionCoefficients(af, a).CL;
+  const atStall = (a: number) => a + k * sectionCoefficients(af, a).CL;
 
   return {
     CL,
@@ -736,11 +753,7 @@ function coefficients(af, alphaDeg, ar = Infinity) {
   };
 }
 
-/**
- * @param {number} alphaDeg
- * @returns {Flow}
- */
-function flowFor(alphaDeg) {
+function flowFor(alphaDeg: number): Flow {
   const a = alphaDeg * DEG;
   return { ca: Math.cos(a), sa: Math.sin(a) };
 }
@@ -750,29 +763,29 @@ function flowFor(alphaDeg) {
 /**
  * Two trailing vortices leaving the wing tips at the quarter chord and running downstream (+x),
  * in the 3D world frame (z spanwise). `gamma` is the root circulation, positive for positive lift.
- * @typedef {{ x0: number, y0: number, zTip: number, gamma: number, core: number }} TipVortices
  */
+export interface TipVortices {
+  x0: number;
+  y0: number;
+  zTip: number;
+  gamma: number;
+  core: number;
+}
 
 /**
  * Root circulation of an elliptically loaded wing: lift = ρ V Γ₀ π b / 4, so with V = 1 and a
  * rectangular planform (area = b c), Γ₀ = 2 c CL / π.
- * @param {number} chord
- * @param {number} CL wing lift coefficient
+ * `CL`: wing lift coefficient
  */
-function rootCirculation(chord, CL) {
+function rootCirculation(chord: number, CL: number) {
   return (2 * chord * CL) / Math.PI;
 }
 
 /**
  * Velocity induced by the tip vortices (Biot–Savart, semi-infinite lines, with a soft core so it
  * stays finite on the axis). Inboard they push the air down, outboard they lift it.
- * @param {TipVortices} tv
- * @param {number} x
- * @param {number} y
- * @param {number} z
- * @returns {[number, number, number]}
  */
-function tipVortexVelocity(tv, x, y, z) {
+function tipVortexVelocity(tv: TipVortices, x: number, y: number, z: number): [number, number, number] {
   let v = 0,
     w = 0;
   for (const [zt, g] of [
@@ -795,17 +808,10 @@ function tipVortexVelocity(tv, x, y, z) {
 
 // ---------- Stall wake (visual only) ----------
 
-/**
- * Region behind the separation point where particles get turbulent.
- * @param {Airfoil} af
- * @param {Flow} flow
- * @param {Coefficients} co
- * @returns {Wake | null}
- */
-function stallWake(af, flow, co) {
+/** Region behind the separation point where particles get turbulent. */
+function stallWake(af: Airfoil, flow: Flow, co: Coefficients): Wake | null {
   if (!co.stallVis) return null;
-  /** @param {Point} p */
-  const toWorld = p => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
+  const toWorld = (p: Point) => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
   const xs = af.te.x - (0.2 + 0.55 * co.stallVis) * af.chord;
   const S = toWorld({ x: xs, y: surfaceY(co.side > 0 ? af.upper : af.lower, xs) });
   const T = toWorld(af.te);
@@ -820,12 +826,7 @@ function stallWake(af, flow, co) {
   };
 }
 
-/**
- * @param {Wake | null} wake
- * @param {number} x
- * @param {number} y
- */
-function wakeIntensity(wake, x, y) {
+function wakeIntensity(wake: Wake | null, x: number, y: number) {
   if (!wake) return 0;
   const d = x - wake.x0;
   if (d < 0 || d > wake.len) return 0;
@@ -836,9 +837,9 @@ function wakeIntensity(wake, x, y) {
 
 /**
  * International standard atmosphere, troposphere.
- * @param {number} altitude metres
+ * `altitude`: metres
  */
-function airDensity(altitude) {
+function airDensity(altitude: number) {
   return 1.225 * Math.pow(1 - 2.25577e-5 * altitude, 4.2559);
 }
 

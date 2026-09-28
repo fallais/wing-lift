@@ -4,8 +4,11 @@
 // and downwash (the right wing's one too, off screen), and the loading falls off towards the tip.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import * as Aero from './aero.js';
-import { createParticles, SPEED_COLORS as SPEED_HEX } from './particles.js';
+import * as Aero from './aero';
+import type { Airfoil, Coefficients, Flow, Point } from './aero';
+import type { Frame } from './particle-frame';
+import { createParticles, SPEED_COLORS as SPEED_HEX } from './particles';
+import type { ForceTexts, Forces, Show, View, ViewInput } from './view';
 
 // The colours below are hand-picked display values: skip three's sRGB/linear conversions.
 THREE.ColorManagement.enabled = false;
@@ -31,12 +34,7 @@ const WING_RGB = [0.8, 0.84, 0.9],
 const FORCE_SCALE = 2.2;
 
 // Throws when WebGL is unavailable: the caller then sticks to the 2D view.
-/**
- * @param {HTMLElement} stage
- * @param {import('./view.js').ViewInput} input
- * @returns {import('./view.js').View}
- */
-export function create(stage, { onTilt }) {
+export function create(stage: HTMLElement, { onTilt }: ViewInput): View {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
@@ -55,14 +53,11 @@ export function create(stage, { onTilt }) {
   scene.add(sun);
 
   const tmp = { u: 0, v: 0, inside: false };
-  /** @type {import('./aero.js').Airfoil} */
-  let af;
-  /** @type {import('./aero.js').Flow} */
-  let flow;
-  /** @type {import('./aero.js').Coefficients} */
-  let aero;
-  /** @type {import('./view.js').Show} */
-  let show = { particles: false, streamlines: false, pressure: false, forces: false, vortices: false };
+  // Set by the first setFlow; nothing is drawn before it.
+  let af!: Airfoil;
+  let flow!: Flow;
+  let aero!: Coefficients;
+  let show: Show = { particles: false, streamlines: false, pressure: false, forces: false, vortices: false };
   /**
    * Drawn half span, root to tip, in the chord's units (chord ≈ 4). Not to scale: a real half span is
    * 2 to 15 chords, which would hide the flow around the section. It grows gently with the aspect ratio
@@ -72,8 +67,8 @@ export function create(stage, { onTilt }) {
   let w = 0,
     h = 0;
 
-  const wingToWorld = p => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
-  const sampleVelocity = (x, y) => Aero.velocityClamped(af.field, flow, x, y, tmp);
+  const wingToWorld = (p: Point): Point => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
+  const sampleVelocity = (x: number, y: number) => Aero.velocityClamped(af.field, flow, x, y, tmp);
 
   // ---------- Wing: extruded airfoil, coloured by surface pressure ----------
 
@@ -84,7 +79,7 @@ export function create(stage, { onTilt }) {
   const capMat = new THREE.MeshStandardMaterial({ color: 0x8391a7, roughness: 0.6, side: THREE.DoubleSide });
 
   function buildWing() {
-    wing.children.forEach(m => /** @type {THREE.Mesh} */ (m).geometry.dispose());
+    wing.children.forEach(m => (m as THREE.Mesh).geometry.dispose());
     wing.clear();
     const pts = af.pts,
       n = pts.length;
@@ -135,8 +130,8 @@ export function create(stage, { onTilt }) {
     wing.rotation.z = -Math.atan2(flow.sa, flow.ca);
   }
 
-  /** @param {number} cp surface pressure coefficient, from the panel solution */
-  function surfaceColor(cp) {
+  /** `cp`: surface pressure coefficient, from the panel solution */
+  function surfaceColor(cp: number) {
     if (!show.pressure) return WING_RGB;
     const a = Math.min(1, cp < 0 ? -cp / 1.5 : cp),
       c = cp < 0 ? LOW_RGB : HIGH_RGB;
@@ -195,7 +190,7 @@ export function create(stage, { onTilt }) {
   particles.frustumCulled = false;
   scene.add(particles);
 
-  function drawParticles(frame, speed) {
+  function drawParticles(frame: Frame, speed: number) {
     const { x, y, z, u, v, w, bucket } = frame;
     const tail = (Math.min(speed, 100) / 50) * 0.25;
     for (let i = 0; i < COUNT; i++) {
@@ -229,12 +224,13 @@ export function create(stage, { onTilt }) {
   const labelsEl = document.createElement('div');
   labelsEl.className = 'tags';
   root.append(labelsEl);
-  const labels = {};
-  function makeLabel(key, cls, anchorEnd) {
+  type LabelKey = 'alpha' | 'lift' | 'res' | 'drag' | 'weight';
+  const labels = {} as Record<LabelKey, { el: HTMLDivElement; at: THREE.Vector3; dx: number; dy: number }>;
+  function makeLabel(key: LabelKey, cls: string, anchorEnd = false) {
     const el = document.createElement('div');
     el.className = `tag ${cls}${anchorEnd ? ' end' : ''}`;
     labelsEl.append(el);
-    labels[key] = { el, at: new THREE.Vector3(), dx: 0, dy: 0, on: true };
+    labels[key] = { el, at: new THREE.Vector3(), dx: 0, dy: 0 };
   }
   makeLabel('alpha', 'alpha');
   makeLabel('lift', '', true);
@@ -253,7 +249,7 @@ export function create(stage, { onTilt }) {
   const arc = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xfbbf24 }));
   scene.add(refs, arc);
 
-  function updateAngle(alphaDeg, text) {
+  function updateAngle(alphaDeg: number, text: string) {
     const te = wingToWorld({ x: af.xTE, y: 0 }),
       le = wingToWorld(af.le);
     const dir = { x: flow.ca, y: -flow.sa },
@@ -284,7 +280,7 @@ export function create(stage, { onTilt }) {
     lb.el.textContent = text;
   }
 
-  function makeArrow(color) {
+  function makeArrow(color: number) {
     const mat = new THREE.MeshBasicMaterial({ color });
     const shaftGeo = new THREE.CylinderGeometry(0.045, 0.045, 1, 12).translate(0, 0.5, 0);
     const headGeo = new THREE.ConeGeometry(0.13, 1, 16).translate(0, 0.5, 0);
@@ -297,12 +293,7 @@ export function create(stage, { onTilt }) {
   }
 
   const UP = new THREE.Vector3(0, 1, 0);
-  /**
-   * @param {ReturnType<typeof makeArrow>} arrow
-   * @param {THREE.Vector3} from
-   * @param {THREE.Vector3} to
-   */
-  function setArrow({ group, shaft, head }, from, to) {
+  function setArrow({ group, shaft, head }: ReturnType<typeof makeArrow>, from: THREE.Vector3, to: THREE.Vector3) {
     const d = new THREE.Vector3().subVectors(to, from),
       len = d.length();
     group.visible = len > 0.08;
@@ -335,7 +326,7 @@ export function create(stage, { onTilt }) {
 
   // Arrows are proportional to force; `perNewton` converts newtons to lift coefficient units.
   // Shrunk when needed so they stay inside the particle cloud.
-  function updateForces(f, perNewton, texts) {
+  function updateForces(f: Forces, perNewton: number, texts: ForceTexts) {
     const scale = FORCE_SCALE * perNewton;
     const a = wingToWorld(af.ac);
     const ac = new THREE.Vector3(a.x, a.y, ZF);
@@ -362,12 +353,13 @@ export function create(stage, { onTilt }) {
     comps.computeLineDistances();
 
     const up = f.lift >= 0 ? -1 : 1;
-    const place = (key, at, dx, dy) => Object.assign(labels[key], { dx, dy }).at.copy(at);
+    const place = (key: LabelKey, at: THREE.Vector3, dx: number, dy: number) =>
+      Object.assign(labels[key], { dx, dy }).at.copy(at);
     place('lift', lift, -10, up * 2);
     place('res', res, 10, up * 2);
     place('drag', drag, 10, -up * 22);
     place('weight', weight, -10, -8);
-    for (const key of ['lift', 'res', 'drag', 'weight']) labels[key].el.textContent = texts[key];
+    for (const key of ['lift', 'res', 'drag', 'weight'] as const) labels[key].el.textContent = texts[key];
   }
 
   // ---------- Camera: OrbitControls (drag or one finger to orbit, wheel or pinch to zoom) ----------
@@ -407,7 +399,7 @@ export function create(stage, { onTilt }) {
   }
 
   // Shift + drag tilts the wing instead. Capture phase, so it runs before OrbitControls.
-  let tilt = null;
+  let tilt: { y0: number } | null = null;
   stage.addEventListener(
     'pointerdown',
     e => {
@@ -461,7 +453,7 @@ export function create(stage, { onTilt }) {
   }
 
   /** New span: particle box, arrows at the near tip, and the default framing. */
-  function setSpan(nextHalf) {
+  function setSpan(nextHalf: number) {
     half = nextHalf;
     ZF = half + 0.03;
     setParticleBox();
@@ -472,7 +464,7 @@ export function create(stage, { onTilt }) {
 
   const proj = new THREE.Vector3();
   function placeLabels() {
-    for (const key in labels) {
+    for (const key of Object.keys(labels) as LabelKey[]) {
       const lb = labels[key];
       const on = key === 'alpha' || show.forces;
       lb.el.style.display = on ? '' : 'none';

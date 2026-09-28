@@ -1,26 +1,25 @@
 // 2D view of a wing section: WebGL for the pressure map, Canvas for the flow,
 // SVG for the wing and vectors. Same interface as the 3D view.
-import * as Aero from './aero.js';
-import { createParticles, SPEED_COLORS } from './particles.js';
-import { createPressureLayer } from './pressure.js';
+import * as Aero from './aero';
+import type { Airfoil, Flow, Point } from './aero';
+import type { Frame } from './particle-frame';
+import { createParticles, SPEED_COLORS } from './particles';
+import { createPressureLayer } from './pressure';
+import type { ForceTexts, Forces, Show, View, ViewInput } from './view';
 
 const FORCE_SCALE = 1.5;
 const STROKES = SPEED_COLORS.map(c => c + 'c0');
 
-/**
- * @param {HTMLElement} stage
- * @param {import('./view.js').ViewInput} input
- * @returns {import('./view.js').View}
- */
-export function create(stage, { onTilt, onNudge }) {
+export function create(stage: HTMLElement, { onTilt, onNudge }: ViewInput): View {
   const root = document.createElement('div');
   root.className = 'view';
   root.innerHTML = '<canvas></canvas><canvas></canvas><canvas></canvas><svg aria-hidden="true"></svg>';
   stage.prepend(root);
   const [glCanvas, bgCanvas, fxCanvas] = root.querySelectorAll('canvas');
-  const bgCtx = bgCanvas.getContext('2d');
-  const fxCtx = fxCanvas.getContext('2d');
-  const svg = root.querySelector('svg');
+  // A 2D context is always available; the SVG is created just above.
+  const bgCtx = bgCanvas.getContext('2d')!;
+  const fxCtx = fxCanvas.getContext('2d')!;
+  const svg = root.querySelector('svg')!;
   // Without WebGL the pressure map is computed on the CPU, at a coarser resolution.
   const pressureLayer = createPressureLayer(glCanvas);
   const pressureCanvas = document.createElement('canvas');
@@ -28,27 +27,25 @@ export function create(stage, { onTilt, onNudge }) {
   const tmp = { u: 0, v: 0, inside: false };
 
   const view = { w: 0, h: 0, s: 1, cx: 0, cy: 0, x0: 0, x1: 0, y0: 0, y1: 0, dpr: 1 };
-  /** @type {import('./aero.js').Airfoil} */
-  let af;
-  /** @type {import('./aero.js').Flow} */
-  let flow;
-  /** @type {import('./view.js').Show} */
-  let show = { particles: false, streamlines: false, pressure: false, forces: false, vortices: false };
+  // Set by the first setFlow; nothing is drawn before it.
+  let af!: Airfoil;
+  let flow!: Flow;
+  let show: Show = { particles: false, streamlines: false, pressure: false, forces: false, vortices: false };
   let staticDirty = true,
     active = true;
-  let lastAngle = null,
-    lastForces = null;
+  let lastAngle: [number, string] | null = null,
+    lastForces: [Forces, number, ForceTexts] | null = null;
 
-  const wingToWorld = p => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
-  const toScreen = p => ({ x: view.cx + p.x * view.s, y: view.cy - p.y * view.s });
-  const wingToScreen = p => toScreen(wingToWorld(p));
-  const sx = x => view.cx + x * view.s;
-  const sy = y => view.cy - y * view.s;
-  const sampleVelocity = (x, y) => Aero.velocityClamped(af.field, flow, x, y, tmp);
+  const wingToWorld = (p: Point): Point => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
+  const toScreen = (p: Point): Point => ({ x: view.cx + p.x * view.s, y: view.cy - p.y * view.s });
+  const wingToScreen = (p: Point) => toScreen(wingToWorld(p));
+  const sx = (x: number) => view.cx + x * view.s;
+  const sy = (y: number) => view.cy - y * view.s;
+  const sampleVelocity = (x: number, y: number) => Aero.velocityClamped(af.field, flow, x, y, tmp);
 
   // ---------- Particles: advected by the worker, drawn here as fading streaks ----------
 
-  function drawParticles(frame) {
+  function drawParticles(frame: Frame) {
     const ctx = fxCtx;
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = 'rgba(0,0,0,0.14)';
@@ -90,7 +87,7 @@ export function create(stage, { onTilt, onNudge }) {
       gh = Math.ceil(view.h / cell);
     pressureCanvas.width = gw;
     pressureCanvas.height = gh;
-    const pctx = pressureCanvas.getContext('2d');
+    const pctx = pressureCanvas.getContext('2d')!;
     const img = pctx.createImageData(gw, gh);
     const d = img.data;
 
@@ -150,7 +147,7 @@ export function create(stage, { onTilt, onNudge }) {
 
   // ---------- SVG overlay: wing, angle, forces ----------
 
-  const arrowMarkup = (id, cls) => `<g data-id="${id}" class="arrow ${cls}"><line/><path/></g>`;
+  const arrowMarkup = (id: string, cls: string) => `<g data-id="${id}" class="arrow ${cls}"><line/><path/></g>`;
   svg.innerHTML = `
     <defs>
       <linearGradient id="wingGrad" x1="0" y1="0" x2="0" y2="1">
@@ -171,16 +168,16 @@ export function create(stage, { onTilt, onNudge }) {
       <text data-id="resLabel" class="lbl"/>
       <text data-id="weightLabel" class="lbl" text-anchor="end"/>
     </g>`;
-  const el = {};
-  svg.querySelectorAll('[data-id]').forEach(n => {
-    el[/** @type {SVGElement} */ (n).dataset.id] = n;
+  const el: Record<string, SVGElement> = {};
+  svg.querySelectorAll<SVGElement>('[data-id]').forEach(n => {
+    el[n.dataset.id!] = n;
   });
 
-  const attr = (node, values) => {
-    for (const k in values) node.setAttribute(k, values[k]);
+  const attr = (node: Element, values: Record<string, number>) => {
+    for (const k in values) node.setAttribute(k, String(values[k]));
   };
 
-  function setArrow(id, x1, y1, x2, y2) {
+  function setArrow(id: string, x1: number, y1: number, x2: number, y2: number) {
     const g = el[id];
     const dx = x2 - x1,
       dy = y2 - y1,
@@ -193,19 +190,19 @@ export function create(stage, { onTilt, onNudge }) {
       hw = hl * 0.55;
     const bx = x2 - ux * hl,
       by = y2 - uy * hl;
-    attr(g.querySelector('line'), { x1, y1, x2: bx, y2: by });
-    g.querySelector('path').setAttribute(
+    attr(g.querySelector('line')!, { x1, y1, x2: bx, y2: by });
+    g.querySelector('path')!.setAttribute(
       'd',
       `M${x2} ${y2}L${bx - uy * hw} ${by + ux * hw}L${bx + uy * hw} ${by - ux * hw}Z`,
     );
   }
 
-  function setLabel(id, x, y, text) {
+  function setLabel(id: string, x: number, y: number, text: string) {
     attr(el[id], { x, y });
     el[id].textContent = text;
   }
 
-  function updateAngle(alphaDeg, text) {
+  function updateAngle(alphaDeg: number, text: string) {
     lastAngle = [alphaDeg, text];
     if (!view.w || !af) return;
 
@@ -239,7 +236,7 @@ export function create(stage, { onTilt, onNudge }) {
 
   // Arrows are proportional to force; `perNewton` converts newtons to lift coefficient units.
   // Shrunk when needed so they stay clear of the results strip (top) and the legend (bottom).
-  function updateForces(f, perNewton, texts) {
+  function updateForces(f: Forces, perNewton: number, texts: ForceTexts) {
     lastForces = [f, perNewton, texts];
     el.forces.style.display = show.forces ? '' : 'none';
     if (!view.w || !af || !show.forces) return;
@@ -282,7 +279,7 @@ export function create(stage, { onTilt, onNudge }) {
 
   // ---------- Input: drag vertically or scroll to tilt the wing ----------
 
-  let drag = null;
+  let drag: { y: number } | null = null;
   stage.addEventListener('pointerdown', e => {
     if (!active) return;
     drag = { y: e.clientY };
@@ -302,7 +299,7 @@ export function create(stage, { onTilt, onNudge }) {
     e => {
       if (!active) return;
       e.preventDefault();
-      onNudge(-Math.sign(e.deltaY));
+      onNudge?.(-Math.sign(e.deltaY));
     },
     { passive: false },
   );
@@ -333,8 +330,7 @@ export function create(stage, { onTilt, onNudge }) {
         h = stage.clientHeight;
       // Particles are redrawn every frame: keep that canvas at 1x to spare the GPU.
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      /** @type {[CanvasRenderingContext2D, number][]} */
-      const layers = [
+      const layers: [CanvasRenderingContext2D, number][] = [
         [bgCtx, dpr],
         [fxCtx, 1],
       ];

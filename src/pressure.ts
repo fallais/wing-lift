@@ -1,12 +1,8 @@
 // Pressure coefficient Cp = 1 − |V|² per pixel on the GPU, read from the velocity grids
-// of the panel solution (see aero.js). Shared by the 2D layer and the 3D pressure slice.
+// of the panel solution (see aero.ts), for the 2D view.
+import type { Airfoil, Flow, FlowField, Grid } from './aero';
 
-/** @typedef {import('./aero.js').Airfoil} Airfoil */
-/** @typedef {import('./aero.js').Flow} Flow */
-/** @typedef {import('./aero.js').Grid} Grid */
-/** @typedef {import('./aero.js').FlowField} FlowField */
-
-// Written for GLSL ES 1 (texture2D); three.js and the WebGL2 layer below map it to GLSL ES 3.
+// Written for GLSL ES 1 (texture2D); the WebGL2 layer below maps it to GLSL ES 3.
 export const PRESSURE_GLSL = /* glsl */ `
   uniform vec2 uRot;          // (cos α, sin α)
   uniform sampler2D uFine;    // per node: |V₀|², V₀·V₉₀, |V₉₀|², inside
@@ -67,12 +63,8 @@ export const PRESSURE_GLSL = /* glsl */ `
   }
 `;
 
-/**
- * Uniform values for PRESSURE_GLSL, except the two grid textures.
- * @param {FlowField} field
- * @param {Flow} flow
- */
-export function pressureUniforms(field, flow) {
+/** Uniform values for PRESSURE_GLSL, except the two grid textures. */
+export function pressureUniforms(field: FlowField, flow: Flow) {
   const { fine, coarse } = field;
   return {
     rot: [flow.ca, flow.sa],
@@ -106,21 +98,19 @@ const FRAGMENT = `#version 300 es
 /**
  * Full-canvas pressure map with raw WebGL2, so the 2D view does not need three.js.
  * Returns null when WebGL2 is unavailable.
- * @param {HTMLCanvasElement} canvas
  */
-export function createPressureLayer(canvas) {
+export function createPressureLayer(canvas: HTMLCanvasElement) {
   const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, antialias: false });
   if (!gl) return null;
 
-  /** @param {number} type @param {string} source */
-  const compile = (type, source) => {
-    const shader = /** @type {WebGLShader} */ (gl.createShader(type));
+  const compile = (type: number, source: string) => {
+    const shader = gl.createShader(type) as WebGLShader;
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader) || 'shader');
     return shader;
   };
-  const program = /** @type {WebGLProgram} */ (gl.createProgram());
+  const program = gl.createProgram();
   gl.attachShader(program, compile(gl.VERTEX_SHADER, VERTEX));
   gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAGMENT));
   gl.linkProgram(program);
@@ -133,16 +123,13 @@ export function createPressureLayer(canvas) {
   gl.enableVertexAttribArray(aPos);
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
-  /** @param {string} name */
-  const loc = name => gl.getUniformLocation(program, name);
+  const loc = (name: string) => gl.getUniformLocation(program, name);
   const textures = [gl.createTexture(), gl.createTexture()];
   gl.uniform1i(loc('uFine'), 0);
   gl.uniform1i(loc('uCoarse'), 1);
-  /** @type {FlowField | null} */
-  let uploaded = null;
+  let uploaded: FlowField | null = null;
 
-  /** @param {number} unit @param {Grid} grid */
-  const upload = (unit, grid) => {
+  const upload = (unit: number, grid: Grid) => {
     gl.activeTexture(gl.TEXTURE0 + unit);
     gl.bindTexture(gl.TEXTURE_2D, textures[unit]);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, grid.nx, grid.ny, 0, gl.RGBA, gl.FLOAT, grid.tex);
@@ -154,12 +141,10 @@ export function createPressureLayer(canvas) {
 
   return {
     /**
-     * @param {Airfoil} af
-     * @param {Flow} flow
-     * @param {{ x0: number, y0: number, s: number }} view world origin (bottom-left) and CSS pixels per world unit
-     * @param {number} dpr canvas pixels per CSS pixel
+     * `view`: world origin (bottom-left) and CSS pixels per world unit.
+     * `dpr`: canvas pixels per CSS pixel.
      */
-    draw(af, flow, view, dpr) {
+    draw(af: Airfoil, flow: Flow, view: { x0: number; y0: number; s: number }, dpr: number) {
       if (uploaded !== af.field) {
         upload(0, af.field.fine);
         upload(1, af.field.coarse);
