@@ -82,12 +82,13 @@ button.active { background: var(--accent); border-color: var(--accent); color: #
   position: relative;
   overflow: hidden;
   background: radial-gradient(ellipse at 45% 50%, #14223f 0%, var(--bg) 75%);
-  cursor: ns-resize;
+  cursor: grab;
   touch-action: none;
   user-select: none;
 }
-.stage canvas, .stage svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.stage svg { pointer-events: none; }
+.stage:active { cursor: grabbing; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tags { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 
 .panel {
   overflow-y: auto;
@@ -195,30 +196,17 @@ input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--accent);
 
 /* Stage overlays */
 
-.wing { fill: url(#wingGrad); stroke: #f8fafc; stroke-width: 1.2; stroke-linejoin: round; }
-.ref { stroke: rgba(148, 163, 184, .55); stroke-width: 1; stroke-dasharray: 4 4; }
-.arc { fill: none; stroke: #fbbf24; stroke-width: 1.5; }
-.lbl {
-  fill: var(--text);
+.tag {
+  position: absolute;
+  transform: translateY(-50%);
+  color: var(--text);
   font-size: 12.5px;
   font-weight: 600;
-  paint-order: stroke;
-  stroke: rgba(11, 18, 32, .85);
-  stroke-width: 4px;
-  stroke-linejoin: round;
+  white-space: nowrap;
+  text-shadow: 0 0 3px #0b1220, 0 0 3px #0b1220, 0 0 3px #0b1220;
 }
-.lbl.alpha { fill: #fbbf24; }
-.arrow line { stroke-width: 3; stroke-linecap: round; }
-.arrow.lift line { stroke: var(--lift); }
-.arrow.lift path { fill: var(--lift); }
-.arrow.drag line { stroke: var(--drag); }
-.arrow.drag path { fill: var(--drag); }
-.arrow.res line { stroke: var(--res); }
-.arrow.res path { fill: var(--res); }
-.arrow.weight line { stroke: var(--weight); }
-.arrow.weight path { fill: var(--weight); }
-.comp { stroke: rgba(250, 204, 21, .45); stroke-width: 1; stroke-dasharray: 3 4; }
-.ac { fill: var(--bg); stroke: var(--res); stroke-width: 2; }
+.tag.end { transform: translate(-100%, -50%); }
+.tag.alpha { color: #fbbf24; }
 
 .badge-stall {
   position: absolute;
