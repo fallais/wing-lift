@@ -1,5 +1,6 @@
 import * as Aero from './aero.js';
 import * as Scene2D from './scene2d.js';
+import { decodeSettings, encodeSettings } from './share.js';
 
 const G = 9.81;
 const Q_REF = 0.5 * 1.225 * 50 * 50 * 16;
@@ -45,6 +46,8 @@ const I18N = {
     chart: 'Courbe Cz(α)',
     stall: 'Décrochage !',
     tooSlow: 'Trop lent pour voler !',
+    share: 'Partager',
+    copied: 'Lien copié !',
     legLow: 'dépression',
     legHigh: 'surpression',
     hintOrbit: 'Glisser : tourner la vue',
@@ -99,6 +102,8 @@ const I18N = {
     chart: 'CL(α) curve',
     stall: 'Stall!',
     tooSlow: 'Too slow to fly!',
+    share: 'Share',
+    copied: 'Link copied!',
     legLow: 'low pressure',
     legHigh: 'high pressure',
     hintOrbit: 'Drag: rotate the view',
@@ -147,6 +152,8 @@ const state = {
   alarm: false,
   show: { particles: true, streamlines: false, pressure: true, forces: true },
 };
+const DEFAULTS = structuredClone(state);
+const DEFAULT_VIEW = '3d';
 
 // DOM lookups. The ids come from index.html, so their elements are left untyped.
 /** @param {string} id @returns {any} */
@@ -257,6 +264,35 @@ function render() {
   drawForces();
   drawChart();
   updateReadouts();
+  scheduleUrlUpdate();
+}
+
+// ---------- Shareable link: the address bar always holds the current setup ----------
+
+const shareUrl = () =>
+  location.origin + location.pathname + encodeSettings(state, state.mode || DEFAULT_VIEW, DEFAULTS, DEFAULT_VIEW);
+
+let urlTimer = 0;
+function scheduleUrlUpdate() {
+  clearTimeout(urlTimer);
+  // replaceState: dragging a slider must not fill the browser history.
+  urlTimer = window.setTimeout(() => history.replaceState(null, '', shareUrl()), 300);
+}
+
+async function share() {
+  const url = shareUrl();
+  try {
+    // Phones get the system share sheet; desktops copy the link.
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+      await navigator.share({ title: document.title, url });
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+    $('shareLabel').textContent = tr('copied');
+    setTimeout(() => ($('shareLabel').textContent = tr('share')), 1500);
+  } catch {
+    /* share sheet dismissed or clipboard refused */
+  }
 }
 
 // ---------- Stage: 2D or 3D view ----------
@@ -320,6 +356,7 @@ async function setMode(mode) {
   scene.resize();
   if (af) drawForces();
   stage.classList.remove('loading');
+  scheduleUrlUpdate();
 }
 
 function drawForces() {
@@ -524,6 +561,7 @@ function bindControls() {
       state.show[box.dataset.show] = box.checked;
       $('pressureKey').hidden = !state.show.pressure;
       scene?.setShow(state.show);
+      scheduleUrlUpdate();
     });
   });
   $$('[data-mode]').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
@@ -538,6 +576,7 @@ function bindControls() {
     }),
   );
 
+  $('shareBtn').addEventListener('click', share);
   $('helpBtn').addEventListener('click', () => $('help').showModal());
   $('help').addEventListener('click', e => {
     if (e.target === $('help')) $('help').close();
@@ -559,15 +598,21 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-let savedMode = '3d';
+let savedMode = DEFAULT_VIEW;
 try {
   state.lang = localStorage.getItem('lang') || (navigator.language.startsWith('fr') ? 'fr' : 'en');
   if (localStorage.getItem('view') === '2d') savedMode = '2d';
 } catch {
   /* default */
 }
+// A shared link wins over the defaults and the remembered view.
+const shared = decodeSettings(location.search);
+Object.assign(state, shared.settings);
+if (shared.view) savedMode = shared.view;
+state.mode = savedMode;
 
 bindControls();
+setLevel(state.level);
 setMode(savedMode);
 updateShape();
 applyLanguage();

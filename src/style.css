@@ -93,6 +93,21 @@ button.active {
   font-size: 17px;
   font-weight: 650;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.share-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 .brand .sub {
   color: var(--muted);
@@ -724,6 +739,31 @@ input[type='range'] {
 }
 
 @media (max-width: 480px) {
+  .topbar {
+    gap: 8px;
+    padding: 0 12px;
+  }
+  .brand h1 {
+    font-size: 16px;
+  }
+  .actions {
+    gap: 6px;
+  }
+  .share-btn {
+    padding: 5px 8px;
+  }
+  /* Icon only; the label stays for screen readers. */
+  .share-btn span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .hint {
+    display: none;
+  }
   .hud {
     right: 14px;
     flex-wrap: nowrap;
