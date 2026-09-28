@@ -4,6 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Portance d'une aile</title>
+    <!-- Dark from the very first paint, before the stylesheet arrives. -->
+    <style>
+      html {
+        background: #0b1220;
+        color-scheme: dark;
+      }
+    </style>
+    <link rel="stylesheet" href="/src/style.css" />
     <meta
       name="description"
       content="Simulateur interactif de l'écoulement de l'air et de la portance autour d'un profil d'aile."
@@ -29,7 +37,8 @@
     </header>
 
     <main class="layout">
-      <section class="stage" id="stage">
+      <section class="stage loading" id="stage">
+        <div class="loader" aria-hidden="true"></div>
         <div class="hud">
           <div><span data-i18n="cl">Cz</span><b id="hCl"></b></div>
           <div><span data-i18n="hLd">Finesse</span><b id="hLd"></b></div>

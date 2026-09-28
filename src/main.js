@@ -1,4 +1,3 @@
-import './style.css';
 import * as Aero from './aero.js';
 import * as Scene2D from './scene2d.js';
 
@@ -290,6 +289,8 @@ function sceneFor(mode) {
 let modeRequest = 0;
 async function setMode(mode) {
   const request = ++modeRequest;
+  // Spinner while the view is created; the first 3D switch also downloads three.js.
+  stage.classList.add('loading');
   let next = await sceneFor(mode);
   // No WebGL, or the 3D code failed to load: stay in 2D.
   if (!next) {
@@ -318,6 +319,7 @@ async function setMode(mode) {
   if (af) scene.setFlow(af, flow, aero, state.show);
   scene.resize();
   if (af) drawForces();
+  stage.classList.remove('loading');
 }
 
 function drawForces() {
