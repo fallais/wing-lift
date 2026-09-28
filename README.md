@@ -5,10 +5,11 @@ Interactive wind tunnel in the browser: pick an airfoil, tilt it, and watch the 
 **Live:** https://fallais.github.io/wing-lift/
 
 - Airfoil presets (classic, symmetric, flat plate, high camber) or custom thickness/camber
-- 3D view (drag to orbit, wheel to zoom, double-click to reset, Shift + drag to tilt the wing) or the classic 2D section view (drag vertically or scroll to tilt)
+- 3D view (drag or one finger to orbit, wheel or pinch to zoom, double-click to reset, Shift + drag to tilt the wing) or the classic 2D section view (drag vertically or scroll to tilt)
 - Angle of attack, airspeed, altitude, wing area
 - Air shown as particles, streamlines and a pressure map
 - Lift, drag and resultant force vectors with values in newtons, plus the CL(α) curve with stall
+- Shareable links: the address bar always holds the current setup, and the Share button copies it
 - French / English, with a built-in help glossary
 
 ## How it works

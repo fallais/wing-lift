@@ -1,5 +1,6 @@
 // 3D view: a straight wing with the same 2D potential flow in every section. World frame: wind along +x, y up, z spanwise.
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import * as Aero from './aero.js';
 import { createParticles, SPEED_COLORS as SPEED_HEX } from './particles.js';
 import { PRESSURE_GLSL, pressureUniforms } from './pressure.js';
@@ -408,60 +409,62 @@ export function create(stage, { onTilt }) {
     for (const key of ['lift', 'res', 'drag', 'weight']) labels[key].el.textContent = texts[key];
   }
 
-  // ---------- Camera: drag to orbit, wheel to zoom, double-click to reset ----------
+  // ---------- Camera: OrbitControls (drag or one finger to orbit, wheel or pinch to zoom) ----------
 
-  const cam = { ...DEFAULT_CAM };
-  function placeCamera() {
-    // Pull back on narrow screens so the whole wing stays in frame.
-    const r = cam.r * Math.max(1, 1.5 / (w / h || 1));
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.copy(TARGET);
+  controls.enablePan = false;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.1;
+  controls.rotateSpeed = 0.7;
+  // Elevation between slightly below the wing and almost overhead.
+  controls.minPolarAngle = Math.PI / 2 - 1.3;
+  controls.maxPolarAngle = Math.PI / 2 + 0.2;
+  controls.minDistance = 8;
+  // Until the user moves the camera, resizing keeps the default framing.
+  let userMoved = false;
+  controls.addEventListener('start', () => (userMoved = true));
+
+  // Pull back on narrow screens so the whole wing stays in frame.
+  const fitFactor = () => Math.max(1, 1.5 / (w / h || 1));
+
+  function placeDefaultCamera() {
+    const { th, ph } = DEFAULT_CAM,
+      r = DEFAULT_CAM.r * fitFactor();
     camera.position.set(
-      TARGET.x + r * Math.sin(cam.th) * Math.cos(cam.ph),
-      TARGET.y + r * Math.sin(cam.ph),
-      TARGET.z + r * Math.cos(cam.th) * Math.cos(cam.ph),
+      TARGET.x + r * Math.sin(th) * Math.cos(ph),
+      TARGET.y + r * Math.sin(ph),
+      TARGET.z + r * Math.cos(th) * Math.cos(ph),
     );
-    camera.lookAt(TARGET);
+    controls.target.copy(TARGET);
+    controls.update();
   }
 
-  let drag = null;
-  stage.addEventListener('pointerdown', e => {
-    if (!active) return;
-    drag = { x: e.clientX, y: e.clientY, y0: e.clientY, tilt: e.shiftKey };
-    if (drag.tilt) onTilt(0, true);
-    stage.setPointerCapture(e.pointerId);
-  });
-  stage.addEventListener('pointermove', e => {
-    if (!drag) return;
-    const dx = e.clientX - drag.x,
-      dy = e.clientY - drag.y;
-    drag.x = e.clientX;
-    drag.y = e.clientY;
-    if (drag.tilt) {
-      onTilt(drag.y0 - e.clientY);
-      return;
-    }
-    cam.th -= dx * 0.006;
-    cam.ph = Math.max(-0.2, Math.min(1.3, cam.ph + dy * 0.006));
-    placeCamera();
-  });
-  const endDrag = () => {
-    drag = null;
-  };
-  stage.addEventListener('pointerup', endDrag);
-  stage.addEventListener('pointercancel', endDrag);
+  // Shift + drag tilts the wing instead. Capture phase, so it runs before OrbitControls.
+  let tilt = null;
   stage.addEventListener(
-    'wheel',
+    'pointerdown',
     e => {
-      if (!active) return;
-      e.preventDefault();
-      cam.r = Math.max(8, Math.min(40, cam.r * Math.exp(e.deltaY * 0.001)));
-      placeCamera();
+      if (!active || !e.shiftKey) return;
+      tilt = { y0: e.clientY };
+      controls.enabled = false;
+      onTilt(0, true);
     },
-    { passive: false },
+    { capture: true },
   );
+  stage.addEventListener('pointermove', e => {
+    if (tilt) onTilt(tilt.y0 - e.clientY);
+  });
+  const endTilt = () => {
+    tilt = null;
+    controls.enabled = active;
+  };
+  stage.addEventListener('pointerup', endTilt);
+  stage.addEventListener('pointercancel', endTilt);
   stage.addEventListener('dblclick', () => {
     if (!active) return;
-    Object.assign(cam, DEFAULT_CAM);
-    placeCamera();
+    userMoved = false;
+    placeDefaultCamera();
   });
 
   const proj = new THREE.Vector3();
@@ -500,7 +503,8 @@ export function create(stage, { onTilt }) {
     setActive(on) {
       active = on;
       root.hidden = !on;
-      drag = null;
+      tilt = null;
+      controls.enabled = on;
     },
     resize() {
       w = stage.clientWidth;
@@ -508,7 +512,8 @@ export function create(stage, { onTilt }) {
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      placeCamera();
+      controls.maxDistance = 40 * fitFactor();
+      if (!userMoved) placeDefaultCamera();
     },
     frame(dt, time, speed) {
       particles.visible = !!show.particles;
@@ -518,6 +523,7 @@ export function create(stage, { onTilt }) {
         flowParticles.step(dt, time, speed);
       }
       forceGroup.visible = !!show.forces;
+      controls.update(dt);
       renderer.render(scene, camera);
       placeLabels();
     },
