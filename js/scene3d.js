@@ -1,5 +1,4 @@
-// 3D view of the tunnel: the wing spans wall to wall, so the flow is the same
-// 2D potential flow in every section. World frame: wind along +x, y up, z spanwise.
+// 3D view: a straight wing with the same 2D potential flow in every section. World frame: wind along +x, y up, z spanwise.
 (function () {
   'use strict';
 
@@ -12,7 +11,6 @@
   const SPEED_COLORS = ['#f97316', '#fdba74', '#f1e4d4', '#e2e8f0', '#bae6fd', '#7dd3fc', '#0ea5e9']
     .map(c => new THREE.Color(c));
   const WING_RGB = [0.8, 0.84, 0.9], LOW_RGB = [0.23, 0.51, 0.96], HIGH_RGB = [0.94, 0.27, 0.27];
-  const WALL_RGB = [16, 27, 49];
 
   function create(stage, { onTilt }) {
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -39,52 +37,6 @@
       const sp = Math.hypot(tmp.u, tmp.v);
       if (sp > 3) { tmp.u *= 3 / sp; tmp.v *= 3 / sp; }
       return true;
-    }
-
-    // ---------- Tunnel: floor grid and back wall (which carries the pressure map) ----------
-
-    const grid = [];
-    for (let x = Math.ceil(X0); x <= X1; x++) grid.push(x, Y0, -HALF, x, Y0, HALF);
-    for (let z = -HALF; z <= HALF; z++) grid.push(X0, Y0, z, X1, Y0, z);
-    const floor = new THREE.LineSegments(
-      new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(grid, 3)),
-      new THREE.LineBasicMaterial({ color: 0x22304b }));
-    scene.add(floor);
-
-    const wallCanvas = document.createElement('canvas');
-    wallCanvas.width = 256;
-    wallCanvas.height = Math.round(256 * (Y1 - Y0) / (X1 - X0));
-    const wallTexture = new THREE.CanvasTexture(wallCanvas);
-    const wall = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, Y1 - Y0),
-      new THREE.MeshBasicMaterial({ map: wallTexture }));
-    wall.position.set((X0 + X1) / 2, (Y0 + Y1) / 2, -HALF);
-    scene.add(wall);
-
-    function drawWall() {
-      const gw = wallCanvas.width, gh = wallCanvas.height;
-      const ctx = wallCanvas.getContext('2d');
-      const img = ctx.createImageData(gw, gh);
-      const d = img.data;
-      // Cells inside the wing reuse the last outside value to avoid a dark halo.
-      for (let j = 0; j < gh; j++) {
-        const y = Y1 - (j + 0.5) * (Y1 - Y0) / gh;
-        let cp = 0;
-        for (let i = 0; i < gw; i++) {
-          const x = X0 + (i + 0.5) * (X1 - X0) / gw;
-          let a = 0, c = LOW_RGB;
-          if (show.pressure) {
-            Aero.velocityWorld(af, flow, x, y, tmp);
-            if (!tmp.inside) cp = 1 - (tmp.u * tmp.u + tmp.v * tmp.v);
-            a = 0.8 * Math.min(1, cp < 0 ? -cp / 1.5 : cp);
-            if (cp >= 0) c = HIGH_RGB;
-          }
-          const o = (j * gw + i) * 4;
-          for (let k = 0; k < 3; k++) d[o + k] = WALL_RGB[k] * (1 - a) + 255 * c[k] * a;
-          d[o + 3] = 255;
-        }
-      }
-      ctx.putImageData(img, 0, 0);
-      wallTexture.needsUpdate = true;
     }
 
     // ---------- Wing: extruded airfoil, coloured by surface pressure ----------
@@ -358,7 +310,7 @@
     forceGroup.add(acDot, comps);
 
     // Arrows are proportional to force; `scale` is world units per newton,
-    // shrunk when needed so they stay inside the tunnel.
+    // shrunk when needed so they stay inside the particle cloud.
     function updateForces(f, scale, texts) {
       const a = wingToWorld(af.ac);
       const ac = new THREE.Vector3(a.x, a.y, ZF);
@@ -396,7 +348,7 @@
 
     const cam = { ...DEFAULT_CAM };
     function placeCamera() {
-      // Pull back on narrow screens so the whole tunnel stays in frame.
+      // Pull back on narrow screens so the whole wing stays in frame.
       const r = cam.r * Math.max(1, 1.5 / (w / h || 1));
       camera.position.set(
         TARGET.x + r * Math.sin(cam.th) * Math.cos(cam.ph),
@@ -449,13 +401,11 @@
         if (first) for (let i = 0; i < COUNT; i++) spawn(i, true);
         updateWake();
         buildWing();
-        drawWall();
         buildStreamlines();
       },
       setShow(nextShow) {
         show = nextShow;
         buildWing();
-        drawWall();
         buildStreamlines();
         forceGroup.visible = !!show.forces;
       },
