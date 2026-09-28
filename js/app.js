@@ -47,6 +47,7 @@
       hintOrbit: 'Glisser : tourner la vue',
       hintTilt: 'Maj + glisser : incidence',
       hintZoom: 'Molette : zoom · double-clic : recentrer',
+      hint2d: 'Glisser verticalement ou molette : incidence',
       lift: 'Portance', drag: 'Traînée', res: 'Résultante', weight: 'Poids',
       cl: 'Cz', liftSym: 'P',
       caption: (z, s) => `Portance nulle à α = ${z}° · décrochage vers ${s}°`,
@@ -92,6 +93,7 @@
       hintOrbit: 'Drag: rotate the view',
       hintTilt: 'Shift + drag: angle of attack',
       hintZoom: 'Wheel: zoom · double-click: reset',
+      hint2d: 'Drag vertically or scroll: angle of attack',
       lift: 'Lift', drag: 'Drag', res: 'Resultant', weight: 'Weight',
       cl: 'CL', liftSym: 'L',
       caption: (z, s) => `Zero lift at α = ${z}° · stall around ${s}°`,
@@ -132,7 +134,6 @@
 
   const $ = id => document.getElementById(id);
   const stage = $('stage');
-  const scene = Scene3D.create(stage, { onTilt: dy => setAlpha(state.alpha + dy * 0.12) });
   let af, aero, flow, clMax;
   let time = 0;
 
@@ -233,13 +234,50 @@
     updateReadouts();
   }
 
-  // ---------- Stage: angle and force vectors ----------
+  // ---------- Stage: 2D or 3D view ----------
+
+  const scenes = {};
+  let scene = null, tiltFrom = 0;
+  const sceneInput = {
+    // Drag distance in pixels, upwards positive, counted from the start of the drag.
+    onTilt: (dy, start) => { if (start) tiltFrom = state.alpha; else setAlpha(tiltFrom + dy * 0.12); },
+    onNudge: sign => setAlpha(state.alpha + sign * 0.5),
+  };
+
+  function sceneFor(mode) {
+    if (!(mode in scenes)) {
+      try {
+        scenes[mode] = (mode === '3d' ? Scene3D : Scene2D).create(stage, sceneInput);
+      } catch (e) {
+        scenes[mode] = null;
+      }
+    }
+    return scenes[mode];
+  }
+
+  function setMode(mode) {
+    // No WebGL (or three.js failed to load): stay in 2D.
+    if (mode === '3d' && (typeof THREE === 'undefined' || !sceneFor('3d'))) {
+      mode = '2d';
+      document.querySelector('[data-mode="3d"]').disabled = true;
+    }
+    if (scene) scene.setActive(false);
+    scene = sceneFor(mode);
+    scene.setActive(true);
+    state.mode = mode;
+    stage.dataset.mode = mode;
+    document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    try { localStorage.setItem('view', mode); } catch (e) { /* storage unavailable */ }
+    if (af) scene.setFlow(af, flow, aero, state.show);
+    scene.resize();
+    if (af) drawForces();
+  }
 
   function drawForces() {
     scene.updateAngle(state.alpha, `α = ${fmt(state.alpha, 1)}°`);
-    // 1 unit of coefficient ≈ 2.2 chord-quarters at 50 m/s, 16 m².
+    // Arrow length in lift coefficient units, relative to 50 m/s and 16 m².
     const f = forces();
-    scene.updateForces(f, 2.2 / Q_REF, {
+    scene.updateForces(f, 1 / Q_REF, {
       lift: `${tr('lift')} ${fmtForce(f.lift)}`,
       res: `${tr('res')} ${fmtForce(f.res)}`,
       drag: `${tr('drag')} ${fmtForce(f.drag)}`,
@@ -411,7 +449,8 @@
         scene.setShow(state.show);
       });
     });
-    // The legend holds the display toggles: clicking it must not turn the camera.
+    document.querySelectorAll('[data-mode]').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+    // The legend holds the display toggles: clicking it must not tilt the wing or turn the camera.
     $('legend').addEventListener('pointerdown', e => e.stopPropagation());
     $('pressureKey').hidden = !state.show.pressure;
 
@@ -423,10 +462,6 @@
     $('helpBtn').addEventListener('click', () => $('help').showModal());
     $('help').addEventListener('click', e => { if (e.target === $('help')) $('help').close(); });
 
-  }
-
-  function resize() {
-    scene.resize();
   }
 
   const FRAME_MS = 1000 / 30;
@@ -441,12 +476,17 @@
     requestAnimationFrame(frame);
   }
 
-  try { state.lang = localStorage.getItem('lang') || (navigator.language.startsWith('fr') ? 'fr' : 'en'); } catch (e) { /* default */ }
+  let savedMode = '3d';
+  try {
+    state.lang = localStorage.getItem('lang') || (navigator.language.startsWith('fr') ? 'fr' : 'en');
+    if (localStorage.getItem('view') === '2d') savedMode = '2d';
+  } catch (e) { /* default */ }
 
   bindControls();
+  setMode(savedMode);
   updateShape();
   applyLanguage();
-  new ResizeObserver(resize).observe(stage);
+  new ResizeObserver(() => scene.resize()).observe(stage);
   new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }).observe(stage);
   requestAnimationFrame(frame);
 })();

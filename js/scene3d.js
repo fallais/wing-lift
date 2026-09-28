@@ -12,11 +12,18 @@
     .map(c => new THREE.Color(c));
   const WING_RGB = [0.8, 0.84, 0.9], LOW_RGB = [0.23, 0.51, 0.96], HIGH_RGB = [0.94, 0.27, 0.27];
 
+  const FORCE_SCALE = 2.2;
+
+  // Throws when WebGL is unavailable: the caller then sticks to the 2D view.
   function create(stage, { onTilt }) {
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.setClearColor(0x0b1220);
-    stage.prepend(renderer.domElement);
+    const root = document.createElement('div');
+    root.className = 'view';
+    root.append(renderer.domElement);
+    stage.prepend(root);
+    let active = true;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
@@ -30,14 +37,7 @@
     let w = 0, h = 0;
 
     const wingToWorld = p => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
-
-    function sampleVelocity(x, y) {
-      Aero.velocityWorld(af, flow, x, y, tmp);
-      if (tmp.inside) return false;
-      const sp = Math.hypot(tmp.u, tmp.v);
-      if (sp > 3) { tmp.u *= 3 / sp; tmp.v *= 3 / sp; }
-      return true;
-    }
+    const sampleVelocity = (x, y) => Aero.velocityClamped(af, flow, x, y, tmp);
 
     // ---------- Wing: extruded airfoil, coloured by surface pressure ----------
 
@@ -159,33 +159,6 @@
       life[i] = 15 + Math.random() * 20;
     }
 
-    // Region behind the separation point where particles get turbulent.
-    function updateWake() {
-      if (!aero.stallVis) { wake = null; return; }
-      const xs = af.xTE - (0.2 + 0.55 * aero.stallVis) * af.chord;
-      const surface = aero.side > 0 ? af.upper : af.lower;
-      const S = wingToWorld({ x: xs, y: Aero.surfaceY(surface, xs) });
-      const T = wingToWorld({ x: af.xTE, y: 0 });
-      wake = {
-        x0: S.x,
-        top: Math.max(S.y, T.y) + 0.1,
-        bot: Math.min(S.y, T.y) - 0.1,
-        spreadUp: aero.side > 0 ? 0.22 : 0.08,
-        spreadDown: aero.side > 0 ? 0.08 : 0.22,
-        len: 2.5 + 6 * aero.stallVis,
-        k: aero.stallVis,
-      };
-    }
-
-    function wakeIntensity(x, y) {
-      if (!wake) return 0;
-      const d = x - wake.x0;
-      if (d < 0 || d > wake.len) return 0;
-      const edge = Math.min(wake.top + wake.spreadUp * d - y, y - wake.bot + wake.spreadDown * d);
-      if (edge <= 0) return 0;
-      return Math.min(0.9, 1.2 * wake.k * (1 - d / wake.len)) * Math.min(1, edge / 0.4);
-    }
-
     function stepParticles(dt, time, speed) {
       particles.visible = !!show.particles;
       if (!show.particles) return;
@@ -202,7 +175,7 @@
         let u = tmp.u, v = tmp.v;
         if (sampleVelocity(x + u * k / 2, y + v * k / 2)) { u = tmp.u; v = tmp.v; }
 
-        const wk = wakeIntensity(x, y);
+        const wk = Aero.wakeIntensity(wake, x, y);
         if (wk > 0) {
           u = u * (1 - wk) + wk * (0.3 + 0.9 * Math.sin(3.1 * y - 5 * time + phase[i]));
           v = v * (1 - wk) + wk * 0.9 * Math.cos(2.7 * x - 4 * time + phase[i] * 1.7);
@@ -230,7 +203,7 @@
     const ZF = HALF + 0.03;
     const labelsEl = document.createElement('div');
     labelsEl.className = 'tags';
-    stage.append(labelsEl);
+    root.append(labelsEl);
     const labels = {};
     function makeLabel(key, cls, anchorEnd) {
       const el = document.createElement('div');
@@ -309,9 +282,10 @@
       new THREE.LineDashedMaterial({ color: 0xfacc15, dashSize: 0.08, gapSize: 0.1, transparent: true, opacity: 0.5 }));
     forceGroup.add(acDot, comps);
 
-    // Arrows are proportional to force; `scale` is world units per newton,
-    // shrunk when needed so they stay inside the particle cloud.
-    function updateForces(f, scale, texts) {
+    // Arrows are proportional to force; `perNewton` converts newtons to lift coefficient units.
+    // Shrunk when needed so they stay inside the particle cloud.
+    function updateForces(f, perNewton, texts) {
+      const scale = FORCE_SCALE * perNewton;
       const a = wingToWorld(af.ac);
       const ac = new THREE.Vector3(a.x, a.y, ZF);
       const above = Math.max(f.lift, 0), below = Math.max(f.weight, -f.lift);
@@ -359,14 +333,16 @@
 
     let drag = null;
     stage.addEventListener('pointerdown', e => {
-      drag = { x: e.clientX, y: e.clientY, tilt: e.shiftKey };
+      if (!active) return;
+      drag = { x: e.clientX, y: e.clientY, y0: e.clientY, tilt: e.shiftKey };
+      if (drag.tilt) onTilt(0, true);
       stage.setPointerCapture(e.pointerId);
     });
     stage.addEventListener('pointermove', e => {
       if (!drag) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       drag.x = e.clientX; drag.y = e.clientY;
-      if (drag.tilt) { onTilt(-dy); return; }
+      if (drag.tilt) { onTilt(drag.y0 - e.clientY); return; }
       cam.th -= dx * 0.006;
       cam.ph = Math.max(-0.2, Math.min(1.3, cam.ph + dy * 0.006));
       placeCamera();
@@ -375,11 +351,12 @@
     stage.addEventListener('pointerup', endDrag);
     stage.addEventListener('pointercancel', endDrag);
     stage.addEventListener('wheel', e => {
+      if (!active) return;
       e.preventDefault();
       cam.r = Math.max(8, Math.min(40, cam.r * Math.exp(e.deltaY * 0.001)));
       placeCamera();
     }, { passive: false });
-    stage.addEventListener('dblclick', () => { Object.assign(cam, DEFAULT_CAM); placeCamera(); });
+    stage.addEventListener('dblclick', () => { if (!active) return; Object.assign(cam, DEFAULT_CAM); placeCamera(); });
 
     const proj = new THREE.Vector3();
     function placeLabels() {
@@ -399,7 +376,7 @@
         const first = !af;
         af = nextAf; flow = nextFlow; aero = nextAero; show = nextShow;
         if (first) for (let i = 0; i < COUNT; i++) spawn(i, true);
-        updateWake();
+        wake = Aero.stallWake(af, flow, aero);
         buildWing();
         buildStreamlines();
       },
@@ -411,6 +388,11 @@
       },
       updateAngle,
       updateForces,
+      setActive(on) {
+        active = on;
+        root.hidden = !on;
+        drag = null;
+      },
       resize() {
         w = stage.clientWidth; h = stage.clientHeight;
         renderer.setSize(w, h, false);

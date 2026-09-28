@@ -134,12 +134,49 @@
     out.v = -u * sa + v * ca;
   }
 
+  // Same as velocityWorld, capped near the singular trailing edge. False inside the wing.
+  function velocityClamped(af, flow, x, y, out) {
+    velocityWorld(af, flow, x, y, out);
+    if (out.inside) return false;
+    const sp = Math.hypot(out.u, out.v);
+    if (sp > 3) { out.u *= 3 / sp; out.v *= 3 / sp; }
+    return true;
+  }
+
+  // Visual only: region behind the separation point where particles get turbulent.
+  function stallWake(af, flow, co) {
+    if (!co.stallVis) return null;
+    const toWorld = p => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
+    const xs = af.xTE - (0.2 + 0.55 * co.stallVis) * af.chord;
+    const S = toWorld({ x: xs, y: surfaceY(co.side > 0 ? af.upper : af.lower, xs) });
+    const T = toWorld({ x: af.xTE, y: 0 });
+    return {
+      x0: S.x,
+      top: Math.max(S.y, T.y) + 0.1,
+      bot: Math.min(S.y, T.y) - 0.1,
+      spreadUp: co.side > 0 ? 0.22 : 0.08,
+      spreadDown: co.side > 0 ? 0.08 : 0.22,
+      len: 2.5 + 6 * co.stallVis,
+      k: co.stallVis,
+    };
+  }
+
+  function wakeIntensity(wake, x, y) {
+    if (!wake) return 0;
+    const d = x - wake.x0;
+    if (d < 0 || d > wake.len) return 0;
+    const edge = Math.min(wake.top + wake.spreadUp * d - y, y - wake.bot + wake.spreadDown * d);
+    if (edge <= 0) return 0;
+    return Math.min(0.9, 1.2 * wake.k * (1 - d / wake.len)) * Math.min(1, edge / 0.4);
+  }
+
   function airDensity(altitude) {
     return 1.225 * Math.pow(1 - 2.25577e-5 * altitude, 4.2559);
   }
 
   window.Aero = {
     PRESETS, ASPECT_RATIO,
-    makeAirfoil, coefficients, flowFor, velocityWorld, airDensity, surfaceY,
+    makeAirfoil, coefficients, flowFor, velocityWorld, velocityClamped, stallWake, wakeIntensity,
+    airDensity, surfaceY,
   };
 })();

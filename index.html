@@ -35,6 +35,9 @@
       <div class="badge-stall" id="stallBadge" data-i18n="stall">Décrochage !</div>
       <div class="badge-stall slow" id="slowBadge" data-i18n="tooSlow">Trop lent !</div>
       <div class="legend" id="legend">
+        <div class="modes" role="group" aria-label="Vue">
+          <button data-mode="2d">2D</button><button data-mode="3d">3D</button>
+        </div>
         <label class="legend-row">
           <input type="checkbox" data-show="particles"><span data-i18n="showParticles">Particules</span>
         </label>
@@ -53,9 +56,10 @@
       </div>
       <div class="corner">
         <div class="hint">
-          <span data-i18n="hintOrbit">Glisser : tourner la vue</span>
-          <span data-i18n="hintTilt">Maj + glisser : incidence</span>
-          <span data-i18n="hintZoom">Molette : zoom · double-clic : recentrer</span>
+          <span data-for="3d" data-i18n="hintOrbit">Glisser : tourner la vue</span>
+          <span data-for="3d" data-i18n="hintTilt">Maj + glisser : incidence</span>
+          <span data-for="3d" data-i18n="hintZoom">Molette : zoom · double-clic : recentrer</span>
+          <span data-for="2d" data-i18n="hint2d">Glisser verticalement ou molette : incidence</span>
         </div>
         <div class="pressure-key" id="pressureKey">
           <span data-i18n="legLow">dépression</span><span class="bar"></span><span data-i18n="legHigh">surpression</span>
@@ -263,6 +267,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
   <script src="js/aero.js"></script>
+  <script src="js/scene2d.js"></script>
   <script src="js/scene3d.js"></script>
   <script src="js/app.js"></script>
 </body>
