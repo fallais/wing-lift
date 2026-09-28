@@ -1,6 +1,7 @@
 import * as Aero from './aero.js';
 import * as Scene2D from './scene2d.js';
 import { decodeSettings, encodeSettings } from './share.js';
+import { createSolver } from './solver.js';
 
 const G = 9.81;
 const Q_REF = 0.5 * 1.225 * 50 * 50 * 16;
@@ -18,6 +19,7 @@ const I18N = {
     pCustom: 'Personnalisé',
     thickness: 'Épaisseur',
     camber: 'Cambrure',
+    flap: 'Volets',
     flight: 'Vol',
     alpha: 'Incidence α',
     speed: 'Vitesse V',
@@ -74,6 +76,7 @@ const I18N = {
     pCustom: 'Custom',
     thickness: 'Thickness',
     camber: 'Camber',
+    flap: 'Flaps',
     flight: 'Flight',
     alpha: 'Angle of attack α',
     speed: 'Airspeed V',
@@ -143,6 +146,7 @@ const state = {
   lang: 'fr',
   thickness: 11,
   camber: 5,
+  flap: 0,
   alpha: 5,
   speed: 50,
   altitude: 1500,
@@ -199,19 +203,26 @@ function levelAlpha() {
 
 // ---------- Simulation state ----------
 
-function updateShape() {
-  af = Aero.makeAirfoil(state.thickness, state.camber);
+// The shape and its flow are computed in a worker (~0.1 s); the old one stays on screen meanwhile.
+const solver = createSolver(result => {
+  af = result;
   clMax = Aero.coefficients(af, Aero.coefficients(af, 0).stallPos).CL;
   updateAlpha();
+  syncLoading();
+});
+
+function updateShape() {
+  solver.solve({ thickness: state.thickness, camber: state.camber, flap: state.flap });
 }
 
 function updateAlpha() {
+  if (!af) return;
   if (state.level) {
     state.alpha = levelAlpha();
     $('alpha').value = state.alpha;
   }
   aero = Aero.coefficients(af, state.alpha);
-  flow = Aero.flowFor(af, state.alpha);
+  flow = Aero.flowFor(state.alpha);
   scene?.setFlow(af, flow, aero, state.show);
   updateAlarm();
   render();
@@ -261,6 +272,7 @@ function updateAlarm() {
 }
 
 function render() {
+  if (!af) return;
   drawForces();
   drawChart();
   updateReadouts();
@@ -323,10 +335,13 @@ function sceneFor(mode) {
 }
 
 let modeRequest = 0;
+let modeLoading = false;
+const syncLoading = () => stage.classList.toggle('loading', modeLoading || !af);
 async function setMode(mode) {
   const request = ++modeRequest;
   // Spinner while the view is created; the first 3D switch also downloads three.js.
-  stage.classList.add('loading');
+  modeLoading = true;
+  syncLoading();
   let next = await sceneFor(mode);
   // No WebGL, or the 3D code failed to load: stay in 2D.
   if (!next) {
@@ -355,7 +370,8 @@ async function setMode(mode) {
   if (af) scene.setFlow(af, flow, aero, state.show);
   scene.resize();
   if (af) drawForces();
-  stage.classList.remove('loading');
+  modeLoading = false;
+  syncLoading();
   scheduleUrlUpdate();
 }
 
@@ -384,7 +400,8 @@ function drawChart() {
   const A0 = -20,
     A1 = 25,
     C0 = -1.6,
-    C1 = 2.4;
+    // Room for the higher maximum lift with flaps.
+    C1 = Math.max(2.4, clMax + 0.4);
   const X = a => L + ((a - A0) / (A1 - A0)) * (W - L - R);
   const Y = c => T + ((C1 - c) / (C1 - C0)) * (H - T - B);
 
@@ -395,7 +412,7 @@ function drawChart() {
     s += `<line class="${a ? 'grid' : 'axis'}" x1="${X(a)}" x2="${X(a)}" y1="${T}" y2="${H - B}"/>`;
     s += `<text x="${X(a)}" y="${H - 6}" text-anchor="middle">${a}°</text>`;
   }
-  for (const c of [-1, 0, 1, 2]) {
+  for (let c = -1; c <= C1 - 0.2; c++) {
     s += `<line class="${c ? 'grid' : 'axis'}" x1="${L}" x2="${W - R}" y1="${Y(c)}" y2="${Y(c)}"/>`;
     s += `<text x="${L - 5}" y="${Y(c) + 3}" text-anchor="end">${c}</text>`;
   }
@@ -423,6 +440,7 @@ function updateReadouts() {
   const f = forces();
   $('outThickness').textContent = `${fmt(state.thickness, 1)} %`;
   $('outCamber').textContent = `${fmt(state.camber, 1)} %`;
+  $('outFlap').textContent = `${fmt(state.flap)}°`;
   $('outAlpha').textContent = `${fmt(state.alpha, 1)}°`;
   $('outSpeed').textContent = `${fmt(state.speed)} m/s · ${fmt(state.speed * 3.6)} km/h`;
   $('outAltitude').textContent = `${fmt(state.altitude)} m`;
@@ -512,6 +530,7 @@ function bindControls() {
   const ranges = {
     thickness: updateShape,
     camber: updateShape,
+    flap: updateShape,
     alpha: () => {
       setLevel(false);
       updateAlpha();

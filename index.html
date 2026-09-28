@@ -115,6 +115,10 @@
               <input type="range" id="camber" min="-10" max="12" step="0.5" />
             </div>
           </div>
+          <div class="field">
+            <div class="row"><label for="flap" data-i18n="flap">Volets</label><output id="outFlap"></output></div>
+            <input type="range" id="flap" min="0" max="40" step="5" />
+          </div>
         </section>
 
         <section class="card">
@@ -247,6 +251,13 @@
             Courbure de la ligne moyenne du profil. Un profil cambré porte déjà à α = 0°. Un profil symétrique ne porte
             qu'avec une incidence.
           </dd>
+          <dt>Volets</dt>
+          <dd>
+            Partie arrière de l'aile (ici le dernier quart) qui s'abaisse pour cambrer le profil. Ils augmentent la
+            portance maximale et abaissent donc la vitesse de décrochage : on les sort au décollage et à l'atterrissage.
+            Le décrochage arrive un peu plus tôt en incidence, et la traînée augmente vite : les derniers crans servent
+            surtout à freiner pendant l'approche.
+          </dd>
           <dt>Extrados / intrados</dt>
           <dd>Face supérieure / face inférieure de l'aile.</dd>
           <dt>Épaisseur</dt>
@@ -284,9 +295,11 @@
 
         <h3>Le modèle</h3>
         <p class="muted">
-          Écoulement potentiel autour d'un profil de Joukowski, avec condition de Kutta (l'air quitte proprement le bord
-          de fuite). Le décrochage et la traînée viennent d'un modèle empirique simplifié (allongement supposé de 8).
-          C'est un outil pédagogique, pas un outil de conception.
+          Écoulement potentiel exact autour du profil (profils de Joukowski, volets compris), calculé par une méthode
+          des panneaux tourbillonnaires avec condition de Kutta (l'air quitte proprement le bord de fuite). Le
+          décrochage et la traînée viennent d'un modèle empirique simplifié (allongement supposé de 8) ; l'effet des
+          volets y est réduit au-delà de 15°, où l'air décolle en partie du volet. C'est un outil pédagogique, pas un
+          outil de conception.
         </p>
       </div>
 
@@ -338,6 +351,12 @@
             Curvature of the airfoil's mean line. A cambered airfoil already lifts at α = 0°. A symmetric one only lifts
             with some angle of attack.
           </dd>
+          <dt>Flaps</dt>
+          <dd>
+            The rear part of the wing (here the last quarter) that hinges down to add camber. Flaps raise the maximum
+            lift and so lower the stall speed: they are used for take-off and landing. The stall comes at a slightly
+            lower angle, and drag grows fast: the last notches mostly slow the aircraft down on approach.
+          </dd>
           <dt>Upper / lower surface</dt>
           <dd>Top / bottom face of the wing (French: extrados / intrados).</dd>
           <dt>Thickness</dt>
@@ -369,9 +388,10 @@
 
         <h3>The model</h3>
         <p class="muted">
-          Potential flow around a Joukowski airfoil with the Kutta condition (air leaves the trailing edge smoothly).
-          Stall and drag come from a simplified empirical model (aspect ratio assumed to be 8). A teaching tool, not a
-          design tool.
+          Exact potential flow around the airfoil (Joukowski shapes, flaps included), computed with a vortex panel
+          method and the Kutta condition (air leaves the trailing edge smoothly). Stall and drag come from a simplified
+          empirical model (aspect ratio assumed to be 8); the flap's effect is reduced beyond 15°, where the air partly
+          separates from the flap. A teaching tool, not a design tool.
         </p>
       </div>
     </dialog>

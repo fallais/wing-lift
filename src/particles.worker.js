@@ -8,10 +8,10 @@ import { SPEED_BUCKETS, layout } from './particle-frame.js';
 /** @typedef {import('./aero.js').Wake} Wake */
 /** @typedef {import('./particle-frame.js').Bounds} Bounds */
 
-/** @type {import('./aero.js').Circle | null} */
-let circle = null;
-/** @type {Flow} */
-let flow;
+/** @type {import('./aero.js').FlowField | null} */
+let field = null;
+/** @type {Flow | null} */
+let flow = null;
 /** @type {Wake | null} */
 let wake = null;
 /** @type {Bounds} */
@@ -25,7 +25,7 @@ let spawned = false;
 const tmp = { u: 0, v: 0, inside: false };
 
 /** @param {number} px @param {number} py */
-const sample = (px, py) => velocityClamped(/** @type {import('./aero.js').Circle} */ (circle), flow, px, py, tmp);
+const sample = (px, py) => velocityClamped(field, flow, px, py, tmp);
 
 /** @param {number} i @param {boolean} anywhere */
 function spawn(i, anywhere) {
@@ -111,16 +111,18 @@ self.onmessage = ({ data }) => {
       phase = new Float32Array(count);
       life = new Float32Array(count);
       spawned = false;
-      if (circle) spawnAll();
+      if (field && flow) spawnAll();
+      break;
+    case 'field':
+      field = data.field;
       break;
     case 'flow':
-      circle = data.circle;
       flow = data.flow;
       wake = data.wake;
-      if (!spawned) spawnAll();
+      if (field && !spawned) spawnAll();
       break;
     case 'step': {
-      const ready = circle && data.count === count;
+      const ready = field && flow && data.count === count;
       const k = ready ? step(data.buffer, data.dt, data.time, data.speed) : 0;
       self.postMessage({ buffer: data.buffer, count: data.count, k, ready }, { transfer: [data.buffer] });
       break;

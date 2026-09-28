@@ -44,7 +44,7 @@ export function create(stage, { onTilt, onNudge }) {
   const wingToScreen = p => toScreen(wingToWorld(p));
   const sx = x => view.cx + x * view.s;
   const sy = y => view.cy - y * view.s;
-  const sampleVelocity = (x, y) => Aero.velocityClamped(af, flow, x, y, tmp);
+  const sampleVelocity = (x, y) => Aero.velocityClamped(af.field, flow, x, y, tmp);
 
   // ---------- Particles: advected by the worker, drawn here as fading streaks ----------
 
@@ -100,7 +100,7 @@ export function create(stage, { onTilt, onNudge }) {
       let cp = 0;
       for (let i = 0; i < gw; i++) {
         const x = view.x0 + ((i + 0.5) * cell) / view.s;
-        Aero.velocityWorld(af, flow, x, y, tmp);
+        Aero.velocityWorld(af.field, flow, x, y, tmp);
         if (!tmp.inside) cp = 1 - (tmp.u * tmp.u + tmp.v * tmp.v);
         const o = (j * gw + i) * 4;
         if (cp < 0) {

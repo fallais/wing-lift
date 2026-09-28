@@ -6,6 +6,7 @@
  * @typedef {object} Settings
  * @property {number} thickness
  * @property {number} camber
+ * @property {number} flap
  * @property {number} alpha
  * @property {number} speed
  * @property {number} altitude
@@ -19,6 +20,7 @@
 export const RANGES = {
   thickness: [1, 25],
   camber: [-10, 12],
+  flap: [0, 40],
   alpha: [-20, 25],
   speed: [0, 250],
   altitude: [0, 12000],

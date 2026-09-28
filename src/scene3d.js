@@ -60,7 +60,7 @@ export function create(stage, { onTilt }) {
     h = 0;
 
   const wingToWorld = p => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
-  const sampleVelocity = (x, y) => Aero.velocityClamped(af, flow, x, y, tmp);
+  const sampleVelocity = (x, y) => Aero.velocityClamped(af.field, flow, x, y, tmp);
 
   // ---------- Wing: extruded airfoil, coloured by surface pressure ----------
 
@@ -79,23 +79,21 @@ export function create(stage, { onTilt }) {
       nor = [],
       col = [],
       idx = [];
+    const cp = Aero.surfacePressure(af, flow);
     for (let i = 0; i < n; i++) {
       const a = pts[(i + n - 2) % (n - 1)],
         b = pts[(i + 1) % (n - 1)];
       const tx = b.x - a.x,
         ty = b.y - a.y,
         tl = Math.hypot(tx, ty) || 1;
-      let nx = ty / tl,
+      // Outward normal of the counter-clockwise outline.
+      const nx = ty / tl,
         ny = -tx / tl;
-      const rgb = surfaceColor(pts[i], nx, ny);
-      if (rgb.flip) {
-        nx = -nx;
-        ny = -ny;
-      }
+      const rgb = surfaceColor(cp[i]);
       for (const z of [-HALF, HALF]) {
         pos.push(pts[i].x, pts[i].y, z);
         nor.push(nx, ny, 0);
-        col.push(...rgb.c);
+        col.push(...rgb);
       }
       if (i < n - 1) {
         const k = 2 * i;
@@ -118,21 +116,12 @@ export function create(stage, { onTilt }) {
     wing.rotation.z = -Math.atan2(flow.sa, flow.ca);
   }
 
-  // Pressure just outside the skin, sampled a little along the outward normal.
-  function surfaceColor(p, nx, ny) {
-    let flip = false;
-    let q = wingToWorld({ x: p.x + nx * 0.03, y: p.y + ny * 0.03 });
-    Aero.velocityWorld(af, flow, q.x, q.y, tmp);
-    if (tmp.inside) {
-      flip = true;
-      q = wingToWorld({ x: p.x - nx * 0.03, y: p.y - ny * 0.03 });
-      Aero.velocityWorld(af, flow, q.x, q.y, tmp);
-    }
-    if (!show.pressure || tmp.inside) return { flip, c: WING_RGB };
-    const cp = 1 - (tmp.u * tmp.u + tmp.v * tmp.v);
+  /** @param {number} cp surface pressure coefficient, from the panel solution */
+  function surfaceColor(cp) {
+    if (!show.pressure) return WING_RGB;
     const a = Math.min(1, cp < 0 ? -cp / 1.5 : cp),
       c = cp < 0 ? LOW_RGB : HIGH_RGB;
-    return { flip, c: WING_RGB.map((v, k) => v * (1 - a) + c[k] * a) };
+    return WING_RGB.map((v, k) => v * (1 - a) + c[k] * a);
   }
 
   // ---------- Streamlines, repeated at a few spanwise stations ----------
@@ -222,9 +211,25 @@ export function create(stage, { onTilt }) {
 
   const pressureUniformValues = {
     uRot: { value: new THREE.Vector2(1, 0) },
-    uCircle: { value: new THREE.Vector3() },
-    uGamma: { value: 0 },
+    uFine: { value: /** @type {THREE.DataTexture | null} */ (null) },
+    uFineGrid: { value: new THREE.Vector3() },
+    uFineSize: { value: new THREE.Vector2() },
+    uCoarse: { value: /** @type {THREE.DataTexture | null} */ (null) },
+    uCoarseGrid: { value: new THREE.Vector3() },
+    uCoarseSize: { value: new THREE.Vector2() },
+    uCirculation: { value: new THREE.Vector2() },
+    uCentre: { value: new THREE.Vector2() },
   };
+  /** @type {import('./aero.js').FlowField | null} */
+  let uploadedField = null;
+
+  /** @param {import('./aero.js').Grid} grid */
+  function gridTexture(grid) {
+    const t = new THREE.DataTexture(grid.tex, grid.nx, grid.ny, THREE.RGBAFormat, THREE.FloatType);
+    t.minFilter = t.magFilter = THREE.NearestFilter;
+    t.needsUpdate = true;
+    return t;
+  }
   const pressureSlice = new THREE.Mesh(
     new THREE.PlaneGeometry(X1 - X0, Y1 - Y0),
     new THREE.ShaderMaterial({
@@ -255,10 +260,22 @@ export function create(stage, { onTilt }) {
   scene.add(pressureSlice);
 
   function updatePressureSlice() {
-    const p = pressureUniforms(af, flow);
-    pressureUniformValues.uRot.value.set(p.rot[0], p.rot[1]);
-    pressureUniformValues.uCircle.value.set(p.circle[0], p.circle[1], p.circle[2]);
-    pressureUniformValues.uGamma.value = p.gamma;
+    const u = pressureUniformValues;
+    if (uploadedField !== af.field) {
+      u.uFine.value?.dispose();
+      u.uCoarse.value?.dispose();
+      u.uFine.value = gridTexture(af.field.fine);
+      u.uCoarse.value = gridTexture(af.field.coarse);
+      uploadedField = af.field;
+    }
+    const p = pressureUniforms(af.field, flow);
+    u.uRot.value.fromArray(p.rot);
+    u.uFineGrid.value.fromArray(p.fineGrid);
+    u.uFineSize.value.fromArray(p.fineSize);
+    u.uCoarseGrid.value.fromArray(p.coarseGrid);
+    u.uCoarseSize.value.fromArray(p.coarseSize);
+    u.uCirculation.value.fromArray(p.circulation);
+    u.uCentre.value.fromArray(p.centre);
     pressureSlice.visible = !!show.pressure;
   }
 

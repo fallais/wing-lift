@@ -16,6 +16,8 @@ export function createParticles() {
   let buffer = null;
   /** @type {Frame | null} */
   let fresh = null;
+  /** @type {import('./aero.js').FlowField | null} */
+  let sentField = null;
 
   worker.onmessage = ({ data }) => {
     // Results for an old particle count are dropped, and their buffer with them.
@@ -41,7 +43,12 @@ export function createParticles() {
      * @param {Wake | null} wake
      */
     setFlow(af, flow, wake) {
-      worker.postMessage({ type: 'flow', circle: { mx: af.mx, my: af.my, R2: af.R2 }, flow, wake });
+      // The velocity grids only change with the shape; copying them on every angle change would be wasteful.
+      if (af.field !== sentField) {
+        worker.postMessage({ type: 'field', field: af.field });
+        sentField = af.field;
+      }
+      worker.postMessage({ type: 'flow', flow, wake });
     },
     /**
      * Asks for the next frame; skipped while the previous one is still being computed.

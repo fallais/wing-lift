@@ -3,19 +3,75 @@ import * as Aero from './aero.js';
 
 const classic = Aero.makeAirfoil(11, 5);
 const symmetric = Aero.makeAirfoil(12, 0);
+const flapped = Aero.makeAirfoil(11, 5, 20);
 
 /** Wing-frame point to world frame, as the views do. */
 const toWorld = (flow, p) => ({ x: p.x * flow.ca + p.y * flow.sa, y: -p.x * flow.sa + p.y * flow.ca });
 
 function velocity(af, flow, x, y) {
   const out = { u: 0, v: 0, inside: false };
-  Aero.velocityWorld(af, flow, x, y, out);
+  Aero.velocityWorld(af.field, flow, x, y, out);
   return out;
 }
 
-describe('makeAirfoil', () => {
+/**
+ * Exact potential flow around the same Joukowski airfoil (conformal mapping), world frame.
+ * The panel method must reproduce it when the flap is retracted.
+ */
+function joukowski(thicknessPct, camberPct, alphaDeg, x, y) {
+  const eps = Math.max(0.004, thicknessPct / 100 / 1.299);
+  const mx = -eps,
+    my = (2 * camberPct) / 100;
+  const R = Math.hypot(1 - mx, my),
+    R2 = R * R,
+    beta = Math.atan2(my, 1 - mx);
+  const a = (alphaDeg * Math.PI) / 180,
+    ca = Math.cos(a),
+    sa = Math.sin(a),
+    G = 2 * R * Math.sin(a + beta);
+  const zx = x * ca - y * sa,
+    zy = x * sa + y * ca;
+  const ax = zx * zx - zy * zy - 4,
+    ay = 2 * zx * zy,
+    r = Math.hypot(ax, ay);
+  const sx = Math.sqrt(Math.max(0, (r + ax) / 2)),
+    sy = Math.sqrt(Math.max(0, (r - ax) / 2)) * (ay < 0 ? -1 : 1);
+  let px = (zx + sx) / 2,
+    py = (zy + sy) / 2,
+    dx = px - mx,
+    dy = py - my,
+    dd = dx * dx + dy * dy;
+  const qx = (zx - sx) / 2,
+    qy = (zy - sy) / 2,
+    ex = qx - mx,
+    ey = qy - my;
+  if (ex * ex + ey * ey > dd) {
+    px = qx;
+    py = qy;
+    dx = ex;
+    dy = ey;
+    dd = ex * ex + ey * ey;
+  }
+  const d2x = dx * dx - dy * dy,
+    d2y = 2 * dx * dy,
+    d4 = d2x * d2x + d2y * d2y;
+  const wx = ca - (R2 * (ca * d2x + sa * d2y)) / d4 + (G * dy) / dd;
+  const wy = -sa - (R2 * (sa * d2x - ca * d2y)) / d4 + (G * dx) / dd;
+  const p2x = px * px - py * py,
+    p2y = 2 * px * py,
+    p4 = p2x * p2x + p2y * p2y;
+  const jx = 1 - p2x / p4,
+    jy = p2y / p4,
+    j2 = jx * jx + jy * jy;
+  const u = (wx * jx + wy * jy) / j2,
+    v = -(wy * jx - wx * jy) / j2;
+  return { u: u * ca + v * sa, v: -u * sa + v * ca, beta: (beta * 180) / Math.PI, R };
+}
+
+describe('makeShape', () => {
   it('puts the trailing edge at x = 2 with a chord close to 4', () => {
-    expect(classic.xTE).toBe(2);
+    expect(classic.te.x).toBeCloseTo(2, 6);
+    expect(classic.te.y).toBeCloseTo(0, 6);
     expect(classic.chord).toBeGreaterThan(3.9);
     expect(classic.chord).toBeLessThan(4.3);
   });
@@ -27,6 +83,127 @@ describe('makeAirfoil', () => {
 
   it('places the aerodynamic centre at a quarter chord', () => {
     expect((classic.ac.x - classic.le.x) / classic.chord).toBeCloseTo(0.25, 5);
+  });
+
+  it('lowers the trailing edge with the flap and leaves the front untouched', () => {
+    // The trailing edge turns 20° clockwise about the hinge.
+    const d = (20 * Math.PI) / 180,
+      dx = classic.te.x - classic.hinge.x,
+      dy = classic.te.y - classic.hinge.y;
+    expect(flapped.te.x).toBeCloseTo(classic.hinge.x + dx * Math.cos(d) + dy * Math.sin(d), 6);
+    expect(flapped.te.y).toBeCloseTo(classic.hinge.y - dx * Math.sin(d) + dy * Math.cos(d), 6);
+    expect(flapped.te.y).toBeLessThan(-0.3);
+    expect(flapped.le).toEqual(classic.le);
+    expect(flapped.flap).toBe(20);
+  });
+});
+
+describe('panel method', () => {
+  it('reproduces the exact Joukowski flow around the airfoil', () => {
+    const flow = Aero.flowFor(5);
+    const points = [
+      [-3, 0.5],
+      [0, 0.6],
+      [0, -0.4],
+      [1, 0.5],
+      [2.5, 0],
+      [-2.3, 0],
+      [0.5, 0.35],
+      [1.5, 0.15],
+      [-1.5, 0.45],
+      [5, 3],
+      [-8, -4],
+    ];
+    for (const [x, y] of points) {
+      const exact = joukowski(11, 5, 5, x, y);
+      const v = velocity(classic, flow, x, y);
+      expect(v.inside).toBe(false);
+      expect(Math.hypot(v.u - exact.u, v.v - exact.v) / Math.hypot(exact.u, exact.v)).toBeLessThan(0.02);
+    }
+  });
+
+  it('finds the zero-lift angle and lift slope of the exact solution', () => {
+    const exact = joukowski(11, 5, 0, 10, 10);
+    // The sharp trailing edge costs the panel method a few tenths of a degree.
+    expect(Math.abs(classic.alpha0 + exact.beta)).toBeLessThan(0.4);
+    expect(classic.clSlope / ((8 * Math.PI * exact.R) / classic.chord)).toBeCloseTo(1, 1);
+    expect(symmetric.alpha0).toBeCloseTo(0, 6);
+  });
+
+  it('flows along the surface, not through it', () => {
+    const sol = Aero.solvePanels(classic.pts);
+    const a = (5 * Math.PI) / 180;
+    for (const i of [30, 60, 100, 130]) {
+      const p = classic.pts[i],
+        prev = classic.pts[i - 1],
+        next = classic.pts[i + 1];
+      const tx = next.x - prev.x,
+        ty = next.y - prev.y,
+        tl = Math.hypot(tx, ty);
+      // Outward normal of a counter-clockwise outline.
+      const nx = ty / tl,
+        ny = -tx / tl;
+      const [u0, v0, u90, v90] = Aero.panelVelocity(sol, p.x + nx * 0.01, p.y + ny * 0.01);
+      const u = Math.cos(a) * u0 + Math.sin(a) * u90,
+        v = Math.cos(a) * v0 + Math.sin(a) * v90;
+      expect(Math.abs(u * nx + v * ny)).toBeLessThan(0.05 * Math.hypot(u, v));
+    }
+  });
+
+  it('leaves the trailing edge smoothly (Kutta condition)', () => {
+    const sol = Aero.solvePanels(classic.pts);
+    const [u0, v0, u90, v90] = Aero.panelVelocity(sol, classic.te.x + 0.01, classic.te.y);
+    const a = (5 * Math.PI) / 180;
+    expect(Math.hypot(Math.cos(a) * u0 + Math.sin(a) * u90, Math.cos(a) * v0 + Math.sin(a) * v90)).toBeLessThan(1.5);
+  });
+
+  it('has a stagnation point at the nose and suction on the upper surface', () => {
+    const cp = Aero.surfacePressure(classic, Aero.flowFor(5));
+    expect(Math.max(...cp)).toBeGreaterThan(0.95);
+    const iLE = classic.pts.indexOf(classic.le);
+    const upper = cp.slice(5, iLE - 5),
+      lower = cp.slice(iLE + 5, cp.length - 5);
+    expect(Math.min(...upper)).toBeLessThan(Math.min(...lower));
+  });
+
+  it('joins the grids and the far field without a jump', () => {
+    const flow = Aero.flowFor(5);
+    // Either side of the fine grid edge (x = 2.8, y = 1.6 in the wing frame).
+    for (const [p, q] of [
+      [
+        { x: 2.79, y: 0.3 },
+        { x: 2.81, y: 0.3 },
+      ],
+      [
+        { x: 0.5, y: 1.59 },
+        { x: 0.5, y: 1.61 },
+      ],
+    ]) {
+      const a = toWorld(flow, p),
+        b = toWorld(flow, q);
+      const va = velocity(classic, flow, a.x, a.y),
+        vb = velocity(classic, flow, b.x, b.y);
+      expect(Math.hypot(va.u - vb.u, va.v - vb.v)).toBeLessThan(0.02);
+    }
+    // Either side of the coarse grid edge (x = 16 in the wing frame).
+    const a = toWorld(flow, { x: 15.9, y: 0 }),
+      b = toWorld(flow, { x: 16.1, y: 0 });
+    const near = velocity(classic, flow, a.x, a.y),
+      far = velocity(classic, flow, b.x, b.y);
+    expect(Math.hypot(near.u - far.u, near.v - far.v)).toBeLessThan(0.01);
+    const veryFar = velocity(classic, flow, -300, 120);
+    expect(veryFar.u).toBeCloseTo(1, 2);
+    expect(veryFar.v).toBeCloseTo(0, 2);
+  });
+
+  it('flags points inside the wing, flap included', () => {
+    const flow = Aero.flowFor(5);
+    const inside = (af, x) => {
+      const p = toWorld(flow, { x, y: (Aero.surfaceY(af.upper, x) + Aero.surfaceY(af.lower, x)) / 2 });
+      return velocity(af, flow, p.x, p.y).inside;
+    };
+    expect(inside(classic, 0)).toBe(true);
+    expect(inside(flapped, (flapped.hinge.x + flapped.te.x) / 2)).toBe(true);
   });
 });
 
@@ -64,75 +241,45 @@ describe('coefficients', () => {
   });
 });
 
-describe('velocityWorld', () => {
-  const flow = Aero.flowFor(classic, 5);
+describe('flaps', () => {
+  const clean = Aero.coefficients(classic, 0);
+  const down = Aero.coefficients(flapped, 0);
+  const clMax = (af, co) => Aero.coefficients(af, co.stallPos).CL;
 
-  it('recovers the free stream far from the wing', () => {
-    const far = velocity(classic, flow, -200, 80);
-    expect(far.u).toBeCloseTo(1, 2);
-    expect(far.v).toBeCloseTo(0, 2);
+  it('give more lift at the same angle', () => {
+    expect(down.CL).toBeGreaterThan(clean.CL + 0.5);
+    expect(down.zeroLift).toBeLessThan(clean.zeroLift - 8);
   });
 
-  it('flags points inside the wing', () => {
-    const mid = toWorld(flow, { x: 0, y: (Aero.surfaceY(classic.upper, 0) + Aero.surfaceY(classic.lower, 0)) / 2 });
-    expect(velocity(classic, flow, mid.x, mid.y).inside).toBe(true);
+  it('raise the maximum lift but stall at a slightly lower angle', () => {
+    expect(clMax(flapped, down)).toBeGreaterThan(clMax(classic, clean) + 0.5);
+    expect(down.stallPos).toBeLessThan(clean.stallPos);
+    expect(down.stallPos).toBeGreaterThan(clean.stallPos - 5);
   });
 
-  it('flows along the surface, not through it', () => {
-    for (const i of [30, 60, 90, 150, 200]) {
-      const a = classic.pts[i - 1],
-        b = classic.pts[i + 1],
-        p = classic.pts[i];
-      const tl = Math.hypot(b.x - a.x, b.y - a.y);
-      let nx = (b.y - a.y) / tl,
-        ny = -(b.x - a.x) / tl;
-      let q = toWorld(flow, { x: p.x + nx * 1e-3, y: p.y + ny * 1e-3 });
-      if (velocity(classic, flow, q.x, q.y).inside) {
-        nx = -nx;
-        ny = -ny;
-        q = toWorld(flow, { x: p.x + nx * 1e-3, y: p.y + ny * 1e-3 });
-      }
-      const v = velocity(classic, flow, q.x, q.y);
-      const n = toWorld(flow, { x: nx, y: ny });
-      expect(Math.abs(v.u * n.x + v.v * n.y)).toBeLessThan(0.05 * Math.hypot(v.u, v.v) + 0.02);
-    }
-  });
-
-  it('leaves the trailing edge smoothly thanks to the Kutta condition', () => {
-    const te = toWorld(flow, { x: classic.xTE + 0.0005, y: 0 });
-    const kutta = velocity(classic, flow, te.x, te.y);
-    expect(Math.hypot(kutta.u, kutta.v)).toBeLessThan(2);
-    // Any other circulation wraps the flow around the sharp edge at a huge speed.
-    const noCirculation = velocity(classic, { ...flow, G: 0 }, te.x, te.y);
-    expect(Math.hypot(noCirculation.u, noCirculation.v)).toBeGreaterThan(5);
-  });
-
-  it('is faster over the upper surface than under the lower one when lifting', () => {
-    const speedAt = (surface, x, side) => {
-      const q = toWorld(flow, { x, y: Aero.surfaceY(surface, x) + side * 0.02 });
-      const v = velocity(classic, flow, q.x, q.y);
-      return Math.hypot(v.u, v.v);
-    };
-    for (const x of [-1, 0, 1]) expect(speedAt(classic.upper, x, 1)).toBeGreaterThan(speedAt(classic.lower, x, -1));
+  it('add drag', () => {
+    expect(Aero.coefficients(flapped, down.zeroLift).CD).toBeGreaterThan(Aero.coefficients(classic, clean.zeroLift).CD);
   });
 });
 
 describe('velocityClamped', () => {
   it('caps the speed at 3 and reports points inside the wing', () => {
-    const flow = Aero.flowFor(classic, 5);
+    const flow = Aero.flowFor(5);
     const out = { u: 0, v: 0, inside: false };
-    const te = toWorld(flow, { x: classic.xTE + 0.00005, y: 0 });
-    expect(Aero.velocityClamped(classic, { ...flow, G: 0 }, te.x, te.y, out)).toBe(true);
-    expect(Math.hypot(out.u, out.v)).toBeCloseTo(3, 6);
+    for (let x = -3; x < 3; x += 0.05) {
+      if (Aero.velocityClamped(classic.field, flow, x, 0.5, out)) {
+        expect(Math.hypot(out.u, out.v)).toBeLessThanOrEqual(3 + 1e-6);
+      }
+    }
     const mid = toWorld(flow, { x: 0, y: 0.2 });
-    expect(Aero.velocityClamped(classic, flow, mid.x, mid.y, out)).toBe(false);
+    expect(Aero.velocityClamped(classic.field, flow, mid.x, mid.y, out)).toBe(false);
   });
 });
 
 describe('stall wake', () => {
   it('only exists once stalled, and is strongest just behind the wing', () => {
-    expect(Aero.stallWake(classic, Aero.flowFor(classic, 5), Aero.coefficients(classic, 5))).toBeNull();
-    const flow = Aero.flowFor(classic, 20);
+    expect(Aero.stallWake(classic, Aero.flowFor(5), Aero.coefficients(classic, 5))).toBeNull();
+    const flow = Aero.flowFor(20);
     const wake = Aero.stallWake(classic, flow, Aero.coefficients(classic, 20));
     expect(wake).not.toBeNull();
     const y = (wake.top + wake.bot) / 2;

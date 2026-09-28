@@ -4,6 +4,7 @@ import { decodeSettings, encodeSettings } from './share.js';
 const defaults = {
   thickness: 11,
   camber: 5,
+  flap: 0,
   alpha: 5,
   speed: 50,
   altitude: 1500,
@@ -41,7 +42,16 @@ describe('encodeSettings', () => {
 
 describe('decodeSettings', () => {
   it('round-trips with encodeSettings', () => {
-    const s = { ...copy(), thickness: 14.5, camber: -2, alpha: -3.4, altitude: 9000, mass: 93500, area: 122.5 };
+    const s = {
+      ...copy(),
+      thickness: 14.5,
+      camber: -2,
+      flap: 20,
+      alpha: -3.4,
+      altitude: 9000,
+      mass: 93500,
+      area: 122.5,
+    };
     s.show.forces = false;
     const { settings, view } = decodeSettings(encodeSettings(s, '2d', defaults, '3d'));
     expect({ ...copy(), ...settings }).toEqual(s);
