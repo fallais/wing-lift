@@ -17,8 +17,14 @@ The flow is the exact potential flow around a [Joukowski airfoil](https://en.wik
 
 The wing is straight and every section sees the same 2D flow.
 
-No build step: plain HTML, CSS and JavaScript. The 2D view uses Canvas and SVG; the 3D view uses [three.js](https://threejs.org/) from a CDN, and the page falls back to 2D without it.
+Plain JavaScript modules bundled with [Vite](https://vite.dev/). The 2D view uses Canvas and SVG; the 3D view uses [three.js](https://threejs.org/), and the page falls back to 2D without WebGL.
 
 ## Run locally
 
-Open `index.html` in a browser.
+```sh
+npm install
+npm run dev      # dev server with live reload
+npm run build    # production build in dist/
+```
+
+Pushing to `main` builds and deploys to GitHub Pages (`.github/workflows/deploy.yml`).
