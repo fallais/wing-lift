@@ -262,10 +262,27 @@ input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--accent);
 .hud span { color: var(--muted); font-size: 11px; }
 .hud b { font-size: 16px; font-variant-numeric: tabular-nums; }
 
-.pressure-key {
+.corner {
   position: absolute;
   right: 14px;
   bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+.hint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(11, 18, 32, .7);
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.pressure-key {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -323,4 +340,9 @@ input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: var(--accent);
   .hud b { font-size: 13px; white-space: nowrap; }
   .pressure-key { flex-direction: column; gap: 3px; }
   .pressure-key .bar { width: 70px; }
+}
+
+/* Touch screens have no Shift key nor wheel. */
+@media (pointer: coarse) {
+  .hint { display: none; }
 }
