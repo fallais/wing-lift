@@ -20,6 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history, so `git describe --tags` finds the version tag for the header.
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 24

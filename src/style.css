@@ -116,6 +116,13 @@ button.active {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+#version {
+  font:
+    12px ui-monospace,
+    'SF Mono',
+    Menlo,
+    monospace;
+}
 .actions {
   display: flex;
   gap: 10px;

@@ -10,7 +10,6 @@ const Q_REF = 0.5 * 1.225 * 50 * 50 * 16;
 
 const FR = {
   title: "Portance d'une aile",
-  subtitle: 'Soufflerie virtuelle',
   help: 'Aide',
   profile: 'Profil',
   pClassic: 'Classique',
@@ -74,7 +73,6 @@ const FR = {
 // Same keys as French, checked by the type.
 const EN: typeof FR = {
   title: 'Wing lift',
-  subtitle: 'Virtual wind tunnel',
   help: 'Help',
   profile: 'Airfoil',
   pClassic: 'Classic',
@@ -683,6 +681,7 @@ Object.assign(state, shared.settings);
 if (shared.view) savedMode = shared.view;
 state.mode = savedMode;
 
+$('version').textContent = __APP_VERSION__;
 bindControls();
 setLevel(state.level);
 setMode(savedMode);
