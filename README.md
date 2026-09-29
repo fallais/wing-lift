@@ -4,6 +4,8 @@ Interactive wind tunnel in the browser: pick an airfoil, tilt it, and watch the 
 
 **Live:** https://fallais.github.io/wing-lift/
 
+![Wing lift: airflow and pressure around a Cessna 172 airfoil at 5°](screenshot.png)
+
 - Airfoil presets (classic, symmetric, flat plate, high camber) or custom thickness/camber, plus flaps (0 to 40°)
 - 3D view (drag or one finger to orbit, wheel or pinch to zoom, double-click to reset, Shift + drag to tilt the wing) or the classic 2D section view (drag vertically or scroll to tilt)
 - Angle of attack, airspeed, altitude, wing area
