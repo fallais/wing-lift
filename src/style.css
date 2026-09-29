@@ -109,6 +109,21 @@ button.active {
   stroke-width: 2;
   stroke-linecap: round;
 }
+.repo-link {
+  display: flex;
+  padding: 4px;
+  color: var(--muted);
+  border-radius: 8px;
+}
+.repo-link:hover,
+.repo-link:focus-visible {
+  color: var(--text);
+}
+.repo-link svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
 .brand .sub {
   color: var(--muted);
   font-size: 13px;
@@ -802,6 +817,13 @@ input[type='range'] {
 /* Touch screens have no Shift key nor wheel. */
 @media (pointer: coarse) {
   .hint {
+    display: none;
+  }
+}
+
+/* Very narrow phones: keep the title whole, the repository link can go. */
+@media (max-width: 400px) {
+  .repo-link {
     display: none;
   }
 }
